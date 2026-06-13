@@ -23,8 +23,18 @@ export async function seedDatabase(databaseUrl: string) {
         type: model.type,
         provider: model.provider,
         workflowPath: model.workflowPath,
+        isActive: model.isActive ?? true,
         configJson: model.config
       });
+    } else {
+      await db.update(models).set({
+        type: model.type,
+        provider: model.provider,
+        workflowPath: model.workflowPath,
+        isActive: model.isActive ?? true,
+        configJson: model.config,
+        updatedAt: new Date()
+      }).where(eq(models.name, model.name));
     }
   }
 }

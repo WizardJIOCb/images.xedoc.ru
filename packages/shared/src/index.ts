@@ -78,6 +78,7 @@ export const defaultModels = [
     type: "flux",
     provider: "comfyui",
     workflowPath: "workflows/flux-schnell.json",
+    isActive: false,
     config: {
       checkpoint: "flux1-schnell.safetensors"
     }

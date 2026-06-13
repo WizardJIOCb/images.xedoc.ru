@@ -10,4 +10,5 @@ apps/worker/.env
 apps/worker/ecosystem.local.cjs
 uploads/*
 !uploads/.gitkeep
+.runtime/
 drizzle
