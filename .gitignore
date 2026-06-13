@@ -4,6 +4,10 @@ dist
 .env
 .env.local
 *.tsbuildinfo
+.venv
+*.log
+apps/worker/.env
+apps/worker/ecosystem.local.cjs
 uploads/*
 !uploads/.gitkeep
 drizzle

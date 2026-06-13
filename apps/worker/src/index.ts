@@ -9,7 +9,8 @@ const env = {
   workerServerUrl: process.env.WORKER_SERVER_URL ?? "http://localhost:3025",
   workerSecret: process.env.WORKER_SECRET ?? "change_me",
   comfyUrl: process.env.COMFYUI_URL ?? "http://127.0.0.1:8188",
-  workerName: process.env.WORKER_NAME ?? "home-4070ti"
+  workerName: process.env.WORKER_NAME ?? "home-4070ti",
+  workflowRoot: process.env.COMFYUI_WORKFLOW_ROOT
 };
 
 async function api<T>(pathname: string, init?: RequestInit) {
@@ -81,7 +82,10 @@ async function sendResult(jobId: string, images: Array<{ fileName: string; dataB
 async function executeJob(job: any) {
   await updateStatus(job.id, "running", 5);
 
-  const workflowTemplate = await loadWorkflowTemplate(path.resolve(job.workflowPath));
+  const workflowPath = path.isAbsolute(job.workflowPath)
+    ? job.workflowPath
+    : path.resolve(env.workflowRoot ?? process.cwd(), job.workflowPath);
+  const workflowTemplate = await loadWorkflowTemplate(workflowPath);
   const params = job.paramsJson as Record<string, any>;
   const workflow = renderWorkflow(workflowTemplate, {
     prompt: job.prompt,

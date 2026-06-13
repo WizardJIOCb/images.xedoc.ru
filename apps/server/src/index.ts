@@ -19,7 +19,10 @@ async function buildServer() {
 
   const db = createDb(env.DATABASE_URL);
   const { queue } = createQueue(env.REDIS_URL);
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    bodyLimit: 100 * 1024 * 1024
+  });
 
   await app.register(cors, { origin: true });
   await app.register(multipart);
