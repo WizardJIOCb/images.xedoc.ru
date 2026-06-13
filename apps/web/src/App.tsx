@@ -24,7 +24,7 @@ type GalleryItem = {
   createdAt: string;
 };
 
-const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3025";
+const apiUrl = import.meta.env.VITE_API_URL ?? "";
 
 export function App() {
   const [models, setModels] = useState<Model[]>([]);
