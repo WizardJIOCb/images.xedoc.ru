@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@images/shared": [
+        "packages/shared/src/index.ts"
+      ],
+      "@images/db": [
+        "packages/db/src/index.ts"
+      ],
+      "@images/comfy": [
+        "packages/comfy/src/index.ts"
+      ]
+    }
+  }
+}
