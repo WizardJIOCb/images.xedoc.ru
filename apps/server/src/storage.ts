@@ -20,3 +20,17 @@ export async function saveGeneratedImage(rootDir: string, base64Data: string, fi
     thumbnailUrl: `/uploads/generated/${finalName}`
   };
 }
+
+export async function saveSourceImage(rootDir: string, buffer: Buffer, fileName?: string) {
+  const extension = path.extname(fileName ?? "") || ".png";
+  const baseName = path.basename(fileName ?? `${nanoid()}${extension}`, extension);
+  const finalName = `${baseName}-${nanoid()}${extension}`;
+  const outputPath = path.join(rootDir, "source", finalName);
+
+  await writeFile(outputPath, buffer);
+
+  return {
+    fileName: finalName,
+    imageUrl: `/uploads/source/${finalName}`
+  };
+}

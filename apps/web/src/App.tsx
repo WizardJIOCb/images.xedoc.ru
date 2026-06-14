@@ -8,6 +8,7 @@ type Model = {
     checkpoint?: string;
     sizeGb?: number;
     baseCheckpointSizeGb?: number;
+    supportsReference?: boolean;
     promptLanguage?: string;
     defaultParams?: {
       width?: number;
@@ -299,12 +300,22 @@ export function App() {
     batchSize: 1
   });
   const [submitting, setSubmitting] = useState(false);
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
   const formRef = useRef(form);
   const presets = getModelPresets(selectedModelMeta);
 
   useEffect(() => {
     formRef.current = form;
   }, [form]);
+
+  useEffect(() => {
+    return () => {
+      if (referencePreviewUrl) {
+        URL.revokeObjectURL(referencePreviewUrl);
+      }
+    };
+  }, [referencePreviewUrl]);
 
   async function loadData() {
     const [modelsResponse, jobsResponse, galleryResponse] = await Promise.all([
@@ -322,6 +333,11 @@ export function App() {
     setJobsPagination(nextJobs.pagination);
     setGallery(nextGallery.items);
     setGalleryPagination(nextGallery.pagination);
+
+    if (formRef.current.modelId) {
+      const activeModel = nextModels.find((model: Model) => model.id === formRef.current.modelId) ?? null;
+      setSelectedModelMeta(activeModel);
+    }
 
     if (!formRef.current.modelId && nextModels[0]) {
       setSelectedModelMeta(nextModels[0]);
@@ -350,14 +366,46 @@ export function App() {
     setSubmitting(true);
 
     try {
+      let referenceImageUrl: string | undefined;
+
+      if (referenceFile) {
+        if (!selectedModelMeta?.configJson?.supportsReference) {
+          throw new Error("This model does not support reference images yet");
+        }
+
+        const uploadBody = new FormData();
+        uploadBody.append("file", referenceFile);
+
+        const uploadResponse = await fetch(`${apiUrl}/api/reference-images`, {
+          method: "POST",
+          body: uploadBody
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error("Reference image upload failed");
+        }
+
+        const uploadResult = await uploadResponse.json() as { imageUrl: string };
+        referenceImageUrl = uploadResult.imageUrl;
+      }
+
       await fetch(`${apiUrl}/api/generate`, {
         method: "POST",
         headers: {
           "content-type": "application/json"
         },
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          ...form,
+          type: referenceImageUrl ? "image-to-image" : "text-to-image",
+          referenceImageUrl
+        })
       });
       setForm((current) => ({ ...current, prompt: "", negativePrompt: "" }));
+      if (referencePreviewUrl) {
+        URL.revokeObjectURL(referencePreviewUrl);
+      }
+      setReferenceFile(null);
+      setReferencePreviewUrl(null);
       await loadData();
     } finally {
       setSubmitting(false);
@@ -484,6 +532,75 @@ export function App() {
                   placeholder="blurry, malformed hands, low quality"
                 />
               </label>
+
+              <div className="rounded-[1.5rem] border border-black/10 bg-white/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Reference Image</p>
+                    <p className="mt-1 text-xs text-ink/60">
+                      Можно прикрепить картинку и сделать генерацию на её основе через img2img.
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] ${
+                    selectedModelMeta?.configJson?.supportsReference
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800"
+                  }`}>
+                    {selectedModelMeta?.configJson?.supportsReference ? "Supported" : "Text only"}
+                  </span>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+                  <input
+                    className="block w-full text-sm text-ink/70 file:mr-4 file:rounded-full file:border-0 file:bg-ink file:px-4 file:py-2 file:text-sm file:font-semibold file:text-soft"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => {
+                      const nextFile = event.target.files?.[0] ?? null;
+
+                      if (referencePreviewUrl) {
+                        URL.revokeObjectURL(referencePreviewUrl);
+                      }
+
+                      setReferenceFile(nextFile);
+                      setReferencePreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+                    }}
+                  />
+
+                  {referenceFile ? (
+                    <button
+                      type="button"
+                      className="rounded-full bg-canvas px-4 py-2 text-sm text-ink/75 transition hover:bg-canvas/80"
+                      onClick={() => {
+                        if (referencePreviewUrl) {
+                          URL.revokeObjectURL(referencePreviewUrl);
+                        }
+
+                        setReferenceFile(null);
+                        setReferencePreviewUrl(null);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+
+                {referencePreviewUrl ? (
+                  <div className="mt-4 flex items-start gap-4">
+                    <img
+                      className="h-24 w-24 rounded-2xl object-cover"
+                      src={referencePreviewUrl}
+                      alt="Reference preview"
+                    />
+                    <div className="text-xs text-ink/65">
+                      <p>{referenceFile?.name}</p>
+                      <p className="mt-1">
+                        Сейчас референс поддерживают `SDXL Base`, `SDXL Turbo`, `SDXL Lightning 4step` и `SDXL Lightning 4step UNet`.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">

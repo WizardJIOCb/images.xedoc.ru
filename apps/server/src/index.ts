@@ -10,7 +10,7 @@ import { generateJobSchema, workerJobResultSchema, workerJobStatusSchema, worker
 import { env } from "./env.js";
 import { createQueue } from "./queue.js";
 import { seedDatabase } from "./seed.js";
-import { ensureUploadDirs, saveGeneratedImage } from "./storage.js";
+import { ensureUploadDirs, saveGeneratedImage, saveSourceImage } from "./storage.js";
 import { maybeTranslatePrompt } from "./translation.js";
 
 async function buildServer() {
@@ -49,6 +49,29 @@ async function buildServer() {
     return Math.max(0, completedAt.getTime() - startedAt.getTime());
   }
 
+  function getWorkflowPathForRequest(
+    modelType: string,
+    defaultWorkflowPath: string,
+    referenceImageUrl?: string
+  ) {
+    if (!referenceImageUrl) {
+      return defaultWorkflowPath;
+    }
+
+    switch (modelType) {
+      case "sdxl":
+        return "workflows/sdxl-img2img.json";
+      case "sdxl-turbo":
+        return "workflows/sdxl-turbo-img2img.json";
+      case "sdxl-lightning":
+        return "workflows/sdxl-lightning-4step-img2img.json";
+      case "sdxl-lightning-unet":
+        return "workflows/sdxl-lightning-4step-unet-img2img.json";
+      default:
+        return defaultWorkflowPath;
+    }
+  }
+
   app.get("/api/health", async () => ({
     ok: true,
     appUrl: env.APP_URL
@@ -56,6 +79,22 @@ async function buildServer() {
 
   app.get("/api/models", async () => {
     return db.select().from(models).where(eq(models.isActive, true)).orderBy(asc(models.name));
+  });
+
+  app.post("/api/reference-images", async (request, reply) => {
+    const file = await request.file();
+
+    if (!file) {
+      return reply.code(400).send({ message: "Reference image file is required" });
+    }
+
+    if (!file.mimetype.startsWith("image/")) {
+      return reply.code(400).send({ message: "Only image files are supported" });
+    }
+
+    const buffer = await file.toBuffer();
+    const stored = await saveSourceImage(env.UPLOAD_DIR, buffer, file.filename);
+    return reply.code(201).send(stored);
   });
 
   app.get("/api/gallery", async (request) => {
@@ -161,6 +200,12 @@ async function buildServer() {
     }
 
     const modelConfig = selectedModel[0].configJson as Record<string, any>;
+    const supportsReference = modelConfig.supportsReference === true;
+
+    if (input.referenceImageUrl && !supportsReference) {
+      return reply.code(400).send({ message: "Selected model does not support reference images yet" });
+    }
+
     const promptLanguage = modelConfig.promptLanguage ?? "en";
     const shouldTranslate = env.PROMPT_TRANSLATION_ENABLED && promptLanguage === "en";
     let translatedPrompt = { output: input.prompt, translated: false };
@@ -184,6 +229,12 @@ async function buildServer() {
     const scheduler = input.scheduler || defaultParams.scheduler || "normal";
     const batchSize = input.batchSize || defaultParams.batchSize || 1;
 
+    const workflowPath = getWorkflowPathForRequest(
+      selectedModel[0].type,
+      selectedModel[0].workflowPath,
+      input.referenceImageUrl
+    );
+
     const [job] = await db.insert(generationJobs).values({
       userId: adminUser[0].id,
       modelId: input.modelId,
@@ -199,8 +250,9 @@ async function buildServer() {
         sampler,
         scheduler,
         batchSize,
-        workflowPath: selectedModel[0].workflowPath,
+        workflowPath,
         modelConfig,
+        referenceImageUrl: input.referenceImageUrl ?? null,
         effectivePrompt: translatedPrompt.output,
         effectiveNegativePrompt: translatedNegativePrompt.output,
         translatedPrompt: translatedPrompt.translated ? translatedPrompt.output : null,

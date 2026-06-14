@@ -2,7 +2,7 @@ import "dotenv/config";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { downloadImage, getHistory, loadWorkflowTemplate, queuePrompt, renderWorkflow } from "@images/comfy";
+import { downloadImage, getHistory, loadWorkflowTemplate, queuePrompt, renderWorkflow, uploadInputImage } from "@images/comfy";
 import { fetch } from "undici";
 
 const env = {
@@ -104,6 +104,26 @@ async function executeJob(job: any) {
   const workflowTemplate = await loadWorkflowTemplate(workflowPath);
   const params = job.paramsJson as Record<string, any>;
   const modelConfig = (job.modelConfig ?? {}) as Record<string, any>;
+  let referenceImageName = "";
+
+  if (params.referenceImageUrl) {
+    const referenceImageUrl = String(params.referenceImageUrl).startsWith("http")
+      ? String(params.referenceImageUrl)
+      : `${env.workerServerUrl}${params.referenceImageUrl}`;
+    const response = await fetch(referenceImageUrl);
+
+    if (!response.ok) {
+      throw new Error(`Reference image download failed with status ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const sourceUrl = new URL(referenceImageUrl);
+    const originalFileName = path.basename(sourceUrl.pathname) || `reference-${job.id}.png`;
+    const uploadedReference = await uploadInputImage(env.comfyUrl, originalFileName, buffer, response.headers.get("content-type") ?? "image/png");
+    referenceImageName = uploadedReference.name;
+  }
+
   const workflow = renderWorkflow(workflowTemplate, {
     ...Object.fromEntries(
       Object.entries(modelConfig).filter(([, value]) =>
@@ -120,6 +140,7 @@ async function executeJob(job: any) {
     width: params.width ?? 1024,
     height: params.height ?? 1024,
     batch_size: params.batchSize ?? 1,
+    reference_image: referenceImageName,
     model: modelConfig.checkpoint ?? "sd_xl_base_1.0.safetensors"
   });
 

@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { fetch } from "undici";
 
 type WorkflowTemplateValue = string | number;
 
@@ -52,4 +51,22 @@ export async function downloadImage(comfyUrl: string, fileName: string, subfolde
 
   const arrayBuffer = await response.arrayBuffer();
   return Buffer.from(arrayBuffer);
+}
+
+export async function uploadInputImage(comfyUrl: string, fileName: string, buffer: Buffer, mimeType = "image/png") {
+  const formData = new FormData();
+  formData.set("overwrite", "true");
+  formData.set("type", "input");
+  formData.set("image", new Blob([new Uint8Array(buffer)], { type: mimeType }), fileName);
+
+  const response = await fetch(`${comfyUrl}/upload/image`, {
+    method: "POST",
+    body: formData as any
+  });
+
+  if (!response.ok) {
+    throw new Error(`ComfyUI image upload failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ name: string }>;
 }

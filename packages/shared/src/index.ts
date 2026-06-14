@@ -21,6 +21,7 @@ export const generateJobSchema = z.object({
   negativePrompt: z.string().default(""),
   modelId: z.string().uuid(),
   type: generationTypeSchema.default("text-to-image"),
+  referenceImageUrl: z.string().min(1).optional(),
   width: z.number().int().min(256).max(2048).optional(),
   height: z.number().int().min(256).max(2048).optional(),
   steps: z.number().int().min(1).max(100).optional(),
@@ -73,6 +74,7 @@ export const defaultModels = [
     config: {
       checkpoint: "sd_xl_base_1.0.safetensors",
       sizeGb: 6.46,
+      supportsReference: true,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -94,6 +96,7 @@ export const defaultModels = [
     config: {
       checkpoint: "sd_xl_turbo_1.0_fp16.safetensors",
       sizeGb: 4.76,
+      supportsReference: true,
       promptLanguage: "en",
       defaultParams: {
         width: 512,
@@ -115,6 +118,7 @@ export const defaultModels = [
     config: {
       checkpoint: "sdxl_lightning_4step.safetensors",
       sizeGb: 6.46,
+      supportsReference: true,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -138,6 +142,7 @@ export const defaultModels = [
       baseCheckpoint: "sd_xl_base_1.0.safetensors",
       sizeGb: 6.46,
       baseCheckpointSizeGb: 6.46,
+      supportsReference: true,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -159,6 +164,7 @@ export const defaultModels = [
     config: {
       checkpoint: "sd_xl_refiner_1.0.safetensors",
       sizeGb: 5.78,
+      supportsReference: false,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -180,6 +186,7 @@ export const defaultModels = [
     config: {
       checkpoint: "hunyuan_dit_1.2.safetensors",
       sizeGb: 10.61,
+      supportsReference: false,
       promptLanguage: "zh",
       defaultParams: {
         width: 1024,
@@ -201,6 +208,7 @@ export const defaultModels = [
     config: {
       checkpoint: "flux1-schnell.safetensors",
       sizeGb: 23.8,
+      supportsReference: false,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
