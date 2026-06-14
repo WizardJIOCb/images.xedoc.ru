@@ -9,6 +9,7 @@ type Model = {
     sizeGb?: number;
     baseCheckpointSizeGb?: number;
     supportsReference?: boolean;
+    supportsInpaint?: boolean;
     defaultReferenceDenoise?: number;
     promptLanguage?: string;
     defaultParams?: {
@@ -304,7 +305,12 @@ export function App() {
   const [submitting, setSubmitting] = useState(false);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
+  const [referenceImageSize, setReferenceImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [maskDirty, setMaskDirty] = useState(false);
+  const [brushSize, setBrushSize] = useState(48);
   const formRef = useRef(form);
+  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawingMaskRef = useRef(false);
   const presets = getModelPresets(selectedModelMeta);
 
   useEffect(() => {
@@ -318,6 +324,23 @@ export function App() {
       }
     };
   }, [referencePreviewUrl]);
+
+  useEffect(() => {
+    const canvas = maskCanvasRef.current;
+    if (!canvas || !referenceImageSize) {
+      return;
+    }
+
+    canvas.width = referenceImageSize.width;
+    canvas.height = referenceImageSize.height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    setMaskDirty(false);
+  }, [referenceImageSize, referencePreviewUrl]);
 
   async function loadData() {
     const [modelsResponse, jobsResponse, galleryResponse] = await Promise.all([
@@ -370,6 +393,7 @@ export function App() {
 
     try {
       let referenceImageUrl: string | undefined;
+      let maskImageUrl: string | undefined;
 
       if (referenceFile) {
         if (!selectedModelMeta?.configJson?.supportsReference) {
@@ -392,6 +416,47 @@ export function App() {
         referenceImageUrl = uploadResult.imageUrl;
       }
 
+      if (referenceFile && maskDirty && maskCanvasRef.current) {
+        const maskBlob = await new Promise<Blob | null>((resolve) => {
+          const sourceCanvas = maskCanvasRef.current;
+          if (!sourceCanvas) {
+            resolve(null);
+            return;
+          }
+
+          const exportCanvas = document.createElement("canvas");
+          exportCanvas.width = sourceCanvas.width;
+          exportCanvas.height = sourceCanvas.height;
+          const exportContext = exportCanvas.getContext("2d");
+          if (!exportContext) {
+            resolve(null);
+            return;
+          }
+
+          exportContext.fillStyle = "black";
+          exportContext.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+          exportContext.drawImage(sourceCanvas, 0, 0);
+          exportCanvas.toBlob((blob) => resolve(blob), "image/png");
+        });
+
+        if (maskBlob) {
+          const uploadBody = new FormData();
+          uploadBody.append("file", new File([maskBlob], "mask.png", { type: "image/png" }));
+
+          const uploadResponse = await fetch(`${apiUrl}/api/reference-images`, {
+            method: "POST",
+            body: uploadBody
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error("Mask image upload failed");
+          }
+
+          const uploadResult = await uploadResponse.json() as { imageUrl: string };
+          maskImageUrl = uploadResult.imageUrl;
+        }
+      }
+
       await fetch(`${apiUrl}/api/generate`, {
         method: "POST",
         headers: {
@@ -400,7 +465,8 @@ export function App() {
         body: JSON.stringify({
           ...form,
           type: referenceImageUrl ? "image-to-image" : "text-to-image",
-          referenceImageUrl
+          referenceImageUrl,
+          maskImageUrl
         })
       });
       setForm((current) => ({ ...current, prompt: "", negativePrompt: "" }));
@@ -409,10 +475,37 @@ export function App() {
       }
       setReferenceFile(null);
       setReferencePreviewUrl(null);
+      setReferenceImageSize(null);
+      setMaskDirty(false);
       await loadData();
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function drawMask(event: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = maskCanvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+
+    const brushRadius = (brushSize * (scaleX + scaleY)) / 4;
+    context.fillStyle = "white";
+    context.beginPath();
+    context.arc(x, y, brushRadius, 0, Math.PI * 2);
+    context.fill();
+    setMaskDirty(true);
   }
 
   function handleModelChange(modelId: string) {
@@ -567,7 +660,22 @@ export function App() {
                       }
 
                       setReferenceFile(nextFile);
-                      setReferencePreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+                      setMaskDirty(false);
+                      if (nextFile) {
+                        const nextPreviewUrl = URL.createObjectURL(nextFile);
+                        setReferencePreviewUrl(nextPreviewUrl);
+                        const image = new Image();
+                        image.onload = () => {
+                          setReferenceImageSize({
+                            width: image.naturalWidth,
+                            height: image.naturalHeight
+                          });
+                        };
+                        image.src = nextPreviewUrl;
+                      } else {
+                        setReferencePreviewUrl(null);
+                        setReferenceImageSize(null);
+                      }
                     }}
                   />
 
@@ -582,6 +690,8 @@ export function App() {
 
                         setReferenceFile(null);
                         setReferencePreviewUrl(null);
+                        setReferenceImageSize(null);
+                        setMaskDirty(false);
                       }}
                     >
                       Remove
@@ -601,6 +711,86 @@ export function App() {
                       <p className="mt-1">
                         Сейчас референс поддерживают `SDXL Base`, `SDXL Turbo`, `SDXL Lightning 4step` и `SDXL Lightning 4step UNet`.
                       </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                {referencePreviewUrl && selectedModelMeta?.configJson?.supportsInpaint ? (
+                  <div className="rounded-[1.25rem] border border-black/10 bg-canvas/60 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">Mask Editor</p>
+                        <p className="mt-1 text-xs text-ink/60">
+                          Закрась область, которую можно менять. Всё остальное модель постарается сохранить.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-full bg-canvas px-4 py-2 text-sm text-ink/75 transition hover:bg-canvas/80"
+                        onClick={() => {
+                          const canvas = maskCanvasRef.current;
+                          if (!canvas) {
+                            return;
+                          }
+                          const context = canvas.getContext("2d");
+                          if (!context) {
+                            return;
+                          }
+                          context.clearRect(0, 0, canvas.width, canvas.height);
+                          setMaskDirty(false);
+                        }}
+                      >
+                        Clear mask
+                      </button>
+                    </div>
+
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-sm font-semibold">Brush</span>
+                      <input
+                        className="w-full accent-accent"
+                        type="range"
+                        min="12"
+                        max="96"
+                        step="2"
+                        value={brushSize}
+                        onChange={(event) => setBrushSize(Number(event.target.value))}
+                      />
+                    </label>
+
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-black/10 bg-black/5">
+                      <div className="relative">
+                        <img
+                          className="block w-full"
+                          src={referencePreviewUrl}
+                          alt="Reference editing preview"
+                        />
+                        <canvas
+                          ref={maskCanvasRef}
+                          className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
+                          onPointerDown={(event) => {
+                            isDrawingMaskRef.current = true;
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                            drawMask(event);
+                          }}
+                          onPointerMove={(event) => {
+                            if (isDrawingMaskRef.current) {
+                              drawMask(event);
+                            }
+                          }}
+                          onPointerUp={(event) => {
+                            isDrawingMaskRef.current = false;
+                            event.currentTarget.releasePointerCapture(event.pointerId);
+                          }}
+                          onPointerLeave={() => {
+                            isDrawingMaskRef.current = false;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-ink/60">
+                      <span>{maskDirty ? "Mask ready" : "No mask yet"}</span>
+                      <span>Белым рисуешь область, которую можно менять</span>
                     </div>
                   </div>
                 ) : null}

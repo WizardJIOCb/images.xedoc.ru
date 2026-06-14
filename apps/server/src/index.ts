@@ -52,8 +52,24 @@ async function buildServer() {
   function getWorkflowPathForRequest(
     modelType: string,
     defaultWorkflowPath: string,
-    referenceImageUrl?: string
+    referenceImageUrl?: string,
+    maskImageUrl?: string
   ) {
+    if (referenceImageUrl && maskImageUrl) {
+      switch (modelType) {
+        case "sdxl":
+          return "workflows/sdxl-inpaint.json";
+        case "sdxl-turbo":
+          return "workflows/sdxl-turbo-inpaint.json";
+        case "sdxl-lightning":
+          return "workflows/sdxl-lightning-4step-inpaint.json";
+        case "sdxl-lightning-unet":
+          return "workflows/sdxl-lightning-4step-unet-inpaint.json";
+        default:
+          return defaultWorkflowPath;
+      }
+    }
+
     if (!referenceImageUrl) {
       return defaultWorkflowPath;
     }
@@ -201,9 +217,14 @@ async function buildServer() {
 
     const modelConfig = selectedModel[0].configJson as Record<string, any>;
     const supportsReference = modelConfig.supportsReference === true;
+    const supportsInpaint = modelConfig.supportsInpaint === true;
 
     if (input.referenceImageUrl && !supportsReference) {
       return reply.code(400).send({ message: "Selected model does not support reference images yet" });
+    }
+
+    if (input.maskImageUrl && (!input.referenceImageUrl || !supportsInpaint)) {
+      return reply.code(400).send({ message: "Selected model does not support masked editing yet" });
     }
 
     const promptLanguage = modelConfig.promptLanguage ?? "en";
@@ -236,7 +257,8 @@ async function buildServer() {
     const workflowPath = getWorkflowPathForRequest(
       selectedModel[0].type,
       selectedModel[0].workflowPath,
-      input.referenceImageUrl
+      input.referenceImageUrl,
+      input.maskImageUrl
     );
 
     const [job] = await db.insert(generationJobs).values({
@@ -258,6 +280,7 @@ async function buildServer() {
         workflowPath,
         modelConfig,
         referenceImageUrl: input.referenceImageUrl ?? null,
+        maskImageUrl: input.maskImageUrl ?? null,
         effectivePrompt: translatedPrompt.output,
         effectiveNegativePrompt: translatedNegativePrompt.output,
         translatedPrompt: translatedPrompt.translated ? translatedPrompt.output : null,

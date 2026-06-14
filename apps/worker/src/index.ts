@@ -105,6 +105,7 @@ async function executeJob(job: any) {
   const params = job.paramsJson as Record<string, any>;
   const modelConfig = (job.modelConfig ?? {}) as Record<string, any>;
   let referenceImageName = "";
+  let maskImageName = "";
 
   if (params.referenceImageUrl) {
     const referenceImageUrl = String(params.referenceImageUrl).startsWith("http")
@@ -122,6 +123,24 @@ async function executeJob(job: any) {
     const originalFileName = path.basename(sourceUrl.pathname) || `reference-${job.id}.png`;
     const uploadedReference = await uploadInputImage(env.comfyUrl, originalFileName, buffer, response.headers.get("content-type") ?? "image/png");
     referenceImageName = uploadedReference.name;
+  }
+
+  if (params.maskImageUrl) {
+    const maskImageUrl = String(params.maskImageUrl).startsWith("http")
+      ? String(params.maskImageUrl)
+      : `${env.workerServerUrl}${params.maskImageUrl}`;
+    const response = await fetch(maskImageUrl);
+
+    if (!response.ok) {
+      throw new Error(`Mask image download failed with status ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const sourceUrl = new URL(maskImageUrl);
+    const originalFileName = path.basename(sourceUrl.pathname) || `mask-${job.id}.png`;
+    const uploadedMask = await uploadInputImage(env.comfyUrl, originalFileName, buffer, response.headers.get("content-type") ?? "image/png");
+    maskImageName = uploadedMask.name;
   }
 
   const workflow = renderWorkflow(workflowTemplate, {
@@ -142,6 +161,7 @@ async function executeJob(job: any) {
     height: params.height ?? 1024,
     batch_size: params.batchSize ?? 1,
     reference_image: referenceImageName,
+    mask_image: maskImageName,
     model: modelConfig.checkpoint ?? "sd_xl_base_1.0.safetensors"
   });
 

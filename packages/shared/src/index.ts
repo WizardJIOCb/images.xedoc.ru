@@ -22,6 +22,7 @@ export const generateJobSchema = z.object({
   modelId: z.string().uuid(),
   type: generationTypeSchema.default("text-to-image"),
   referenceImageUrl: z.string().min(1).optional(),
+  maskImageUrl: z.string().min(1).optional(),
   denoise: z.number().min(0.05).max(1).optional(),
   width: z.number().int().min(256).max(2048).optional(),
   height: z.number().int().min(256).max(2048).optional(),
@@ -76,6 +77,7 @@ export const defaultModels = [
       checkpoint: "sd_xl_base_1.0.safetensors",
       sizeGb: 6.46,
       supportsReference: true,
+      supportsInpaint: true,
       defaultReferenceDenoise: 0.32,
       promptLanguage: "en",
       defaultParams: {
@@ -99,6 +101,7 @@ export const defaultModels = [
       checkpoint: "sd_xl_turbo_1.0_fp16.safetensors",
       sizeGb: 4.76,
       supportsReference: true,
+      supportsInpaint: true,
       defaultReferenceDenoise: 0.28,
       promptLanguage: "en",
       defaultParams: {
@@ -122,6 +125,7 @@ export const defaultModels = [
       checkpoint: "sdxl_lightning_4step.safetensors",
       sizeGb: 6.46,
       supportsReference: true,
+      supportsInpaint: true,
       defaultReferenceDenoise: 0.3,
       promptLanguage: "en",
       defaultParams: {
@@ -147,6 +151,7 @@ export const defaultModels = [
       sizeGb: 6.46,
       baseCheckpointSizeGb: 6.46,
       supportsReference: true,
+      supportsInpaint: true,
       defaultReferenceDenoise: 0.3,
       promptLanguage: "en",
       defaultParams: {
@@ -170,6 +175,7 @@ export const defaultModels = [
       checkpoint: "sd_xl_refiner_1.0.safetensors",
       sizeGb: 5.78,
       supportsReference: false,
+      supportsInpaint: false,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -192,6 +198,7 @@ export const defaultModels = [
       checkpoint: "hunyuan_dit_1.2.safetensors",
       sizeGb: 10.61,
       supportsReference: false,
+      supportsInpaint: false,
       promptLanguage: "zh",
       defaultParams: {
         width: 1024,
@@ -214,6 +221,7 @@ export const defaultModels = [
       checkpoint: "flux1-schnell.safetensors",
       sizeGb: 23.8,
       supportsReference: false,
+      supportsInpaint: false,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
