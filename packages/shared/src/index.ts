@@ -105,6 +105,47 @@ export const defaultModels = [
     }
   },
   {
+    name: "SDXL Lightning 4step",
+    type: "sdxl-lightning",
+    provider: "comfyui",
+    workflowPath: "workflows/sdxl-lightning-4step.json",
+    isActive: true,
+    config: {
+      checkpoint: "sdxl_lightning_4step.safetensors",
+      promptLanguage: "en",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 4,
+        cfg: 1,
+        sampler: "euler",
+        scheduler: "sgm_uniform",
+        batchSize: 1
+      }
+    }
+  },
+  {
+    name: "SDXL Lightning 4step UNet",
+    type: "sdxl-lightning-unet",
+    provider: "comfyui",
+    workflowPath: "workflows/sdxl-lightning-4step-unet.json",
+    isActive: true,
+    config: {
+      checkpoint: "sdxl_lightning_4step_unet.safetensors",
+      baseCheckpoint: "sd_xl_base_1.0.safetensors",
+      promptLanguage: "en",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 4,
+        cfg: 1,
+        sampler: "euler",
+        scheduler: "sgm_uniform",
+        batchSize: 1
+      }
+    }
+  },
+  {
     name: "SDXL Refiner",
     type: "sdxl-refiner",
     provider: "comfyui",
@@ -118,6 +159,26 @@ export const defaultModels = [
         height: 1024,
         steps: 20,
         cfg: 6,
+        sampler: "euler",
+        scheduler: "normal",
+        batchSize: 1
+      }
+    }
+  },
+  {
+    name: "HunyuanDiT 1.2",
+    type: "hunyuan-dit",
+    provider: "comfyui",
+    workflowPath: "workflows/hunyuan-dit-1.2.json",
+    isActive: true,
+    config: {
+      checkpoint: "hunyuan_dit_1.2.safetensors",
+      promptLanguage: "zh",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 30,
+        cfg: 5,
         sampler: "euler",
         scheduler: "normal",
         batchSize: 1

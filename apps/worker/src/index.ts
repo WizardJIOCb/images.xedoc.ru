@@ -103,7 +103,13 @@ async function executeJob(job: any) {
     : path.resolve(env.workflowRoot ?? process.cwd(), job.workflowPath);
   const workflowTemplate = await loadWorkflowTemplate(workflowPath);
   const params = job.paramsJson as Record<string, any>;
+  const modelConfig = (job.modelConfig ?? {}) as Record<string, any>;
   const workflow = renderWorkflow(workflowTemplate, {
+    ...Object.fromEntries(
+      Object.entries(modelConfig).filter(([, value]) =>
+        ["string", "number", "boolean"].includes(typeof value)
+      )
+    ),
     prompt: job.prompt,
     negative_prompt: job.negativePrompt,
     seed: job.seed ?? 1,
@@ -114,7 +120,7 @@ async function executeJob(job: any) {
     width: params.width ?? 1024,
     height: params.height ?? 1024,
     batch_size: params.batchSize ?? 1,
-    model: job.modelConfig?.checkpoint ?? "sd_xl_base_1.0.safetensors"
+    model: modelConfig.checkpoint ?? "sd_xl_base_1.0.safetensors"
   });
 
   const queued = await queuePrompt(env.comfyUrl, workflow);
