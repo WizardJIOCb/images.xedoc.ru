@@ -155,6 +155,7 @@ async function executeJob(job: any) {
     steps: params.steps ?? 30,
     cfg: params.cfg ?? 7,
     denoise: params.denoise ?? 1,
+    mask_grow: params.maskGrow ?? 0,
     sampler: params.sampler ?? "euler",
     scheduler: params.scheduler ?? "normal",
     width: params.width ?? 1024,

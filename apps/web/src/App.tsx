@@ -15,6 +15,10 @@ type Model = {
     editOnly?: boolean;
     editingTier?: "standard" | "strong";
     defaultReferenceDenoise?: number;
+    defaultMaskGrow?: number;
+    objectInsertionMinDenoise?: number;
+    objectInsertionMinSteps?: number;
+    objectInsertionBatchSize?: number;
     promptLanguage?: string;
     defaultParams?: {
       width?: number;
@@ -300,7 +304,7 @@ function getEditPresets(model: Model | null): EditPreset[] {
       id: "object",
       label: "Add Object",
       description: "Добавить новый объект в подготовленную область.",
-      denoise: strong ? 0.38 : 0.24
+      denoise: strong ? 0.52 : 0.34
     },
     {
       id: "replace",

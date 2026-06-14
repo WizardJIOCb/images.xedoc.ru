@@ -4,7 +4,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { createDb, generatedImages, generationJobs, models, users, workers } from "@images/db";
 import { generateJobSchema, workerJobResultSchema, workerJobStatusSchema, workerRegistrationSchema } from "@images/shared";
 import { env } from "./env.js";
@@ -37,7 +37,8 @@ function buildEditInstruction(prompt: string) {
     "Edit only inside the masked area.",
     normalized,
     "Keep the same lighting, perspective, and background.",
-    "Do not change the person outside the masked area."
+    "Do not change the person outside the masked area.",
+    "Create a clearly recognizable object, not a subtle texture change."
   ].join(" ");
 }
 
@@ -79,7 +80,9 @@ function strengthenObjectInsertionPrompt(prompt: string) {
     prompt,
     "The new object must be clearly visible.",
     "Place it centered in the masked area.",
-    "Make it occupy most of the masked area with realistic contact shadow."
+    "Make it occupy most of the masked area with realistic contact shadow.",
+    "Do not leave the masked area empty.",
+    "Do not replace the object with dirt, blur, stains, or background texture."
   ].join(" ");
 }
 
@@ -137,6 +140,8 @@ async function buildServer() {
           return "workflows/sdxl-lightning-4step-unet-inpaint.json";
         case "sdxl-inpaint-diffusers":
           return "workflows/sdxl-diffusers-inpaint.json";
+        case "sdxl-inpaint-plus":
+          return "workflows/sdxl-inpaint.json";
         default:
           return defaultWorkflowPath;
       }
@@ -236,18 +241,35 @@ async function buildServer() {
       createdAt: generationJobs.createdAt,
       startedAt: generationJobs.startedAt,
       completedAt: generationJobs.completedAt,
-      previewImageUrl: generatedImages.imageUrl,
       modelName: models.name
     })
       .from(generationJobs)
       .innerJoin(models, eq(generationJobs.modelId, models.id))
-      .leftJoin(generatedImages, eq(generatedImages.jobId, generationJobs.id))
       .orderBy(desc(generationJobs.createdAt))
       .limit(pageSize)
       .offset(offset);
 
+    const jobIds = items.map((item) => item.id);
+    const previews = jobIds.length > 0
+      ? await db.select({
+        jobId: generatedImages.jobId,
+        imageUrl: generatedImages.imageUrl
+      })
+        .from(generatedImages)
+        .where(inArray(generatedImages.jobId, jobIds))
+        .orderBy(desc(generatedImages.createdAt))
+      : [];
+
+    const previewMap = new Map<string, string>();
+    for (const preview of previews) {
+      if (!previewMap.has(preview.jobId)) {
+        previewMap.set(preview.jobId, preview.imageUrl);
+      }
+    }
+
     const itemsWithTiming = items.map((item) => ({
       ...item,
+      previewImageUrl: previewMap.get(item.id) ?? null,
       generationDurationMs: getGenerationDurationMs(item.startedAt, item.completedAt)
     }));
 
@@ -343,9 +365,16 @@ async function buildServer() {
       : 1;
     const requestedDenoise = Number.isFinite(input.denoise) ? input.denoise : defaultDenoise;
     const isObjectInsert = editOnly && isObjectInsertionPrompt(translatedPrompt.output);
-    const steps = isObjectInsert ? Math.max(requestedSteps, 36) : requestedSteps;
-    const batchSize = isObjectInsert ? Math.max(requestedBatchSize, 3) : requestedBatchSize;
-    const denoise = isObjectInsert ? Math.max(requestedDenoise, 0.38) : requestedDenoise;
+    const defaultMaskGrow = Number(modelConfig.defaultMaskGrow ?? 12);
+    const objectInsertionMinSteps = Number(modelConfig.objectInsertionMinSteps ?? 36);
+    const objectInsertionBatchSize = Number(modelConfig.objectInsertionBatchSize ?? 3);
+    const objectInsertionMinDenoise = Number(modelConfig.objectInsertionMinDenoise ?? 0.38);
+    const steps = isObjectInsert ? Math.max(requestedSteps, objectInsertionMinSteps) : requestedSteps;
+    const batchSize = isObjectInsert ? Math.max(requestedBatchSize, objectInsertionBatchSize) : requestedBatchSize;
+    const denoise = isObjectInsert ? Math.max(requestedDenoise, objectInsertionMinDenoise) : requestedDenoise;
+    const maskGrow = input.maskImageUrl
+      ? (isObjectInsert ? defaultMaskGrow + 10 : defaultMaskGrow)
+      : 0;
 
     const workflowPath = getWorkflowPathForRequest(
       selectedModel[0].type,
@@ -370,6 +399,7 @@ async function buildServer() {
         scheduler,
         batchSize,
         denoise,
+        maskGrow,
         workflowPath,
         modelConfig,
         referenceImageUrl: input.referenceImageUrl ?? null,

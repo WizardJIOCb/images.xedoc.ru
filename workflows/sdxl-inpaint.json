@@ -18,6 +18,17 @@
     },
     "class_type": "LoadImageMask"
   },
+  "16": {
+    "inputs": {
+      "expand": "{{mask_grow}}",
+      "tapered_corners": true,
+      "mask": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "GrowMask"
+  },
   "6": {
     "inputs": {
       "text": "{{prompt}}",
@@ -49,12 +60,22 @@
         2
       ],
       "mask": [
-        "14",
+        "16",
         0
       ],
-      "grow_mask_by": 12
+      "grow_mask_by": 0
     },
     "class_type": "VAEEncodeForInpaint"
+  },
+  "17": {
+    "inputs": {
+      "samples": [
+        "13",
+        0
+      ],
+      "amount": "{{batch_size}}"
+    },
+    "class_type": "RepeatLatentBatch"
   },
   "10": {
     "inputs": {
@@ -77,7 +98,7 @@
         0
       ],
       "latent_image": [
-        "13",
+        "17",
         0
       ]
     },
@@ -110,7 +131,7 @@
       "y": 0,
       "resize_source": false,
       "mask": [
-        "14",
+        "16",
         0
       ]
     },
