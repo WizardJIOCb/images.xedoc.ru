@@ -10,6 +10,7 @@
   "dependencies": {
     "@images/comfy": "workspace:*",
     "dotenv": "^16.4.7",
+    "jimp": "^1.6.1",
     "undici": "^7.9.0"
   },
   "devDependencies": {
