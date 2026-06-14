@@ -60,6 +60,19 @@ type PaginatedResponse<T> = {
   pagination: PaginationMeta;
 };
 
+type GenerationPreset = {
+  id: string;
+  label: string;
+  description: string;
+  values: {
+    width: number;
+    height: number;
+    steps: number;
+    cfg: number;
+    batchSize: number;
+  };
+};
+
 const apiUrl = import.meta.env.VITE_API_URL ?? "";
 const pageSizeOptions = [3, 5, 10];
 
@@ -102,6 +115,157 @@ function formatModelSize(model: Model) {
   return ` (${sizeGb.toFixed(2)} GB)`;
 }
 
+function getModelPresets(model: Model | null): GenerationPreset[] {
+  const defaults = model?.configJson?.defaultParams;
+  const defaultWidth = defaults?.width ?? 1024;
+  const defaultHeight = defaults?.height ?? 1024;
+  const defaultSteps = defaults?.steps ?? 30;
+  const defaultCfg = defaults?.cfg ?? 7;
+  const defaultBatchSize = defaults?.batchSize ?? 1;
+
+  const balanced: GenerationPreset = {
+    id: "balanced",
+    label: "Balanced",
+    description: "Оптимальный пресет для этой модели.",
+    values: {
+      width: defaultWidth,
+      height: defaultHeight,
+      steps: defaultSteps,
+      cfg: defaultCfg,
+      batchSize: defaultBatchSize
+    }
+  };
+
+  switch (model?.type) {
+    case "sdxl-turbo":
+      return [
+        {
+          id: "fast",
+          label: "Fast",
+          description: "Максимально быстро для черновиков и идей.",
+          values: {
+            width: 512,
+            height: 512,
+            steps: 2,
+            cfg: 0,
+            batchSize: 1
+          }
+        },
+        balanced,
+        {
+          id: "variants",
+          label: "Variants",
+          description: "Сразу несколько быстрых вариантов.",
+          values: {
+            width: 512,
+            height: 512,
+            steps: 4,
+            cfg: 0,
+            batchSize: 2
+          }
+        }
+      ];
+    case "sdxl-lightning":
+    case "sdxl-lightning-unet":
+      return [
+        {
+          id: "fast",
+          label: "Fast",
+          description: "Очень быстрый прогон в духе Lightning.",
+          values: {
+            width: 768,
+            height: 768,
+            steps: 4,
+            cfg: 1,
+            batchSize: 1
+          }
+        },
+        balanced,
+        {
+          id: "landscape",
+          label: "Landscape",
+          description: "Широкий кадр для сцен и окружения.",
+          values: {
+            width: 1216,
+            height: 832,
+            steps: 4,
+            cfg: 1,
+            batchSize: 1
+          }
+        }
+      ];
+    case "hunyuan-dit":
+      return [
+        {
+          id: "fast",
+          label: "Fast",
+          description: "Чуть быстрее, сохраняя приличное качество.",
+          values: {
+            width: 1024,
+            height: 1024,
+            steps: 20,
+            cfg: 5,
+            batchSize: 1
+          }
+        },
+        balanced,
+        {
+          id: "quality",
+          label: "Quality",
+          description: "Больше шагов для более чистой картинки.",
+          values: {
+            width: 1024,
+            height: 1024,
+            steps: 40,
+            cfg: 6,
+            batchSize: 1
+          }
+        }
+      ];
+    case "sdxl":
+    default:
+      return [
+        {
+          id: "fast",
+          label: "Fast",
+          description: "Быстрее и легче для GPU, хорошо для тестов.",
+          values: {
+            width: 768,
+            height: 768,
+            steps: 20,
+            cfg: 6,
+            batchSize: 1
+          }
+        },
+        balanced,
+        {
+          id: "quality",
+          label: "Quality",
+          description: "Больше шагов для аккуратной детализации.",
+          values: {
+            width: 1024,
+            height: 1024,
+            steps: 40,
+            cfg: 7,
+            batchSize: 1
+          }
+        },
+        {
+          id: "portrait",
+          label: "Portrait",
+          description: "Вертикальный формат для персонажей и портретов.",
+          values: {
+            width: 832,
+            height: 1216,
+            steps: 30,
+            cfg: 7,
+            batchSize: 1
+          }
+        }
+      ];
+  }
+}
+
 export function App() {
   const [models, setModels] = useState<Model[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -135,6 +299,7 @@ export function App() {
     batchSize: 1
   });
   const [submitting, setSubmitting] = useState(false);
+  const presets = getModelPresets(selectedModelMeta);
 
   async function loadData() {
     const [modelsResponse, jobsResponse, galleryResponse] = await Promise.all([
@@ -339,25 +504,69 @@ export function App() {
                     value={form.steps}
                     onChange={(event) => setForm({ ...form, steps: Number(event.target.value) })}
                   />
+                  <span className="mt-2 block text-xs text-ink/60">
+                    Сколько шагов делает модель. Больше шагов = медленнее, но обычно детальнее.
+                  </span>
                 </label>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-black/10 bg-white/70 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold">Presets</span>
+                  {presets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className="rounded-full bg-ink px-3 py-1 text-xs uppercase tracking-[0.2em] text-soft transition hover:opacity-90"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          ...preset.values
+                        }))
+                      }
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-ink/65 md:grid-cols-2">
+                  {presets.map((preset) => (
+                    <div key={`${preset.id}-hint`} className="rounded-2xl bg-canvas/80 px-3 py-2">
+                      <strong className="mr-2 text-ink">{preset.label}:</strong>
+                      {preset.description}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold">Width</span>
                   <input className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3" type="number" value={form.width} onChange={(event) => setForm({ ...form, width: Number(event.target.value) })} />
+                  <span className="mt-2 block text-xs text-ink/60">
+                    Ширина картинки. Больше размер = больше VRAM и времени.
+                  </span>
                 </label>
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold">Height</span>
                   <input className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3" type="number" value={form.height} onChange={(event) => setForm({ ...form, height: Number(event.target.value) })} />
+                  <span className="mt-2 block text-xs text-ink/60">
+                    Высота картинки. Для портретов обычно удобнее вертикальный формат.
+                  </span>
                 </label>
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold">CFG</span>
                   <input className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3" type="number" value={form.cfg} onChange={(event) => setForm({ ...form, cfg: Number(event.target.value) })} />
+                  <span className="mt-2 block text-xs text-ink/60">
+                    Насколько строго модель слушается промпта. Слишком высокое значение может портить картинку.
+                  </span>
                 </label>
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold">Batch</span>
                   <input className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3" type="number" value={form.batchSize} onChange={(event) => setForm({ ...form, batchSize: Number(event.target.value) })} />
+                  <span className="mt-2 block text-xs text-ink/60">
+                    Сколько вариантов генерить за один запуск. Больше batch сильнее грузит видеокарту.
+                  </span>
                 </label>
               </div>
 
