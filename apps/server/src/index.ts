@@ -35,7 +35,7 @@ async function buildServer() {
   function parsePagination(query: Record<string, unknown>) {
     const page = Math.max(1, Number(query.page ?? 1) || 1);
     const pageSize = Number(query.pageSize ?? 10) || 10;
-    const safePageSize = [3, 5, 10].includes(pageSize) ? pageSize : 10;
+    const safePageSize = [4, 6, 10].includes(pageSize) ? pageSize : 10;
     const offset = (page - 1) * safePageSize;
 
     return { page, pageSize: safePageSize, offset };

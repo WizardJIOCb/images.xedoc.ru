@@ -74,7 +74,7 @@ type GenerationPreset = {
 };
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "";
-const pageSizeOptions = [3, 5, 10];
+const pageSizeOptions = [4, 6, 10];
 
 function formatDateTime(value?: string | null) {
   if (!value) {
@@ -273,18 +273,18 @@ export function App() {
   const [selectedModelMeta, setSelectedModelMeta] = useState<Model | null>(null);
   const [selectedImage, setSelectedImage] = useState<GalleryItem | null>(null);
   const [jobsPage, setJobsPage] = useState(1);
-  const [jobsPageSize, setJobsPageSize] = useState(5);
+  const [jobsPageSize, setJobsPageSize] = useState(6);
   const [jobsPagination, setJobsPagination] = useState<PaginationMeta>({
     page: 1,
-    pageSize: 5,
+    pageSize: 6,
     totalItems: 0,
     totalPages: 1
   });
   const [galleryPage, setGalleryPage] = useState(1);
-  const [galleryPageSize, setGalleryPageSize] = useState(5);
+  const [galleryPageSize, setGalleryPageSize] = useState(6);
   const [galleryPagination, setGalleryPagination] = useState<PaginationMeta>({
     page: 1,
-    pageSize: 5,
+    pageSize: 6,
     totalItems: 0,
     totalPages: 1
   });
