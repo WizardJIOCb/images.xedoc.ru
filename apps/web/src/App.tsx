@@ -27,6 +27,7 @@ type Job = {
   seed: number | null;
   createdAt: string;
   previewImageUrl?: string | null;
+  modelName?: string;
 };
 
 type GalleryItem = {
@@ -36,6 +37,7 @@ type GalleryItem = {
   prompt: string;
   seed: number | null;
   createdAt: string;
+  modelName?: string;
 };
 
 type PaginationMeta = {
@@ -377,6 +379,7 @@ export function App() {
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-3 text-sm text-ink/65">
+                          <span>Model: {job.modelName ?? "Unknown"}</span>
                           <span>Progress: {job.progress}%</span>
                           <span>Seed: {job.seed ?? "auto"}</span>
                           <span>{new Date(job.createdAt).toLocaleString()}</span>
@@ -407,6 +410,7 @@ export function App() {
                     <div className="space-y-2 p-4">
                       <p className="line-clamp-2 text-sm">{item.prompt}</p>
                       <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-ink/60">
+                        <span>{item.modelName ?? "Unknown"}</span>
                         <span>Seed {item.seed ?? "auto"}</span>
                         <span>{new Date(item.createdAt).toLocaleDateString()}</span>
                       </div>
@@ -447,6 +451,7 @@ export function App() {
             <div className="space-y-2 bg-soft p-4">
               <p className="text-sm text-ink/80">{selectedImage.prompt}</p>
               <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-ink/60">
+                <span>{selectedImage.modelName ?? "Unknown"}</span>
                 <span>Seed {selectedImage.seed ?? "auto"}</span>
                 <span>{new Date(selectedImage.createdAt).toLocaleString()}</span>
               </div>

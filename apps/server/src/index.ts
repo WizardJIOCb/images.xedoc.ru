@@ -61,10 +61,12 @@ async function buildServer() {
       createdAt: generatedImages.createdAt,
       prompt: generationJobs.prompt,
       seed: generationJobs.seed,
-      modelId: generationJobs.modelId
+      modelId: generationJobs.modelId,
+      modelName: models.name
     })
       .from(generatedImages)
       .innerJoin(generationJobs, eq(generatedImages.jobId, generationJobs.id))
+      .innerJoin(models, eq(generationJobs.modelId, models.id))
       .orderBy(desc(generatedImages.createdAt))
       .limit(pageSize)
       .offset(offset);
@@ -90,9 +92,11 @@ async function buildServer() {
       progress: generationJobs.progress,
       seed: generationJobs.seed,
       createdAt: generationJobs.createdAt,
-      previewImageUrl: generatedImages.imageUrl
+      previewImageUrl: generatedImages.imageUrl,
+      modelName: models.name
     })
       .from(generationJobs)
+      .innerJoin(models, eq(generationJobs.modelId, models.id))
       .leftJoin(generatedImages, eq(generatedImages.jobId, generationJobs.id))
       .orderBy(desc(generationJobs.createdAt))
       .limit(pageSize)
@@ -149,6 +153,15 @@ async function buildServer() {
       }
     }
 
+    const defaultParams = modelConfig.defaultParams ?? {};
+    const width = input.width || defaultParams.width || 1024;
+    const height = input.height || defaultParams.height || 1024;
+    const steps = input.steps || defaultParams.steps || 30;
+    const cfg = Number.isFinite(input.cfg) ? input.cfg : (defaultParams.cfg ?? 7);
+    const sampler = input.sampler || defaultParams.sampler || "euler";
+    const scheduler = input.scheduler || defaultParams.scheduler || "normal";
+    const batchSize = input.batchSize || defaultParams.batchSize || 1;
+
     const [job] = await db.insert(generationJobs).values({
       userId: adminUser[0].id,
       modelId: input.modelId,
@@ -157,13 +170,13 @@ async function buildServer() {
       prompt: input.prompt,
       negativePrompt: input.negativePrompt,
       paramsJson: {
-        width: input.width,
-        height: input.height,
-        steps: input.steps,
-        cfg: input.cfg,
-        sampler: input.sampler,
-        scheduler: input.scheduler,
-        batchSize: input.batchSize,
+        width,
+        height,
+        steps,
+        cfg,
+        sampler,
+        scheduler,
+        batchSize,
         workflowPath: selectedModel[0].workflowPath,
         modelConfig,
         effectivePrompt: translatedPrompt.output,

@@ -21,14 +21,14 @@ export const generateJobSchema = z.object({
   negativePrompt: z.string().default(""),
   modelId: z.string().uuid(),
   type: generationTypeSchema.default("text-to-image"),
-  width: z.number().int().min(256).max(2048).default(1024),
-  height: z.number().int().min(256).max(2048).default(1024),
-  steps: z.number().int().min(1).max(100).default(30),
-  cfg: z.number().min(1).max(20).default(7),
+  width: z.number().int().min(256).max(2048).optional(),
+  height: z.number().int().min(256).max(2048).optional(),
+  steps: z.number().int().min(1).max(100).optional(),
+  cfg: z.number().min(0).max(20).optional(),
   seed: z.number().int().nonnegative().optional(),
-  sampler: z.string().default("euler"),
-  scheduler: z.string().default("normal"),
-  batchSize: z.number().int().min(1).max(4).default(1)
+  sampler: z.string().optional(),
+  scheduler: z.string().optional(),
+  batchSize: z.number().int().min(1).max(4).optional()
 });
 
 export const workerRegistrationSchema = z.object({
@@ -94,10 +94,10 @@ export const defaultModels = [
       checkpoint: "sd_xl_turbo_1.0_fp16.safetensors",
       promptLanguage: "en",
       defaultParams: {
-        width: 1024,
-        height: 1024,
+        width: 512,
+        height: 512,
         steps: 4,
-        cfg: 2,
+        cfg: 0,
         sampler: "euler_ancestral",
         scheduler: "normal",
         batchSize: 1
