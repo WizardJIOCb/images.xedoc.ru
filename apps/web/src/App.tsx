@@ -26,6 +26,7 @@ type Job = {
   progress: number;
   seed: number | null;
   createdAt: string;
+  previewImageUrl?: string | null;
 };
 
 type GalleryItem = {
@@ -37,7 +38,20 @@ type GalleryItem = {
   createdAt: string;
 };
 
+type PaginationMeta = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+type PaginatedResponse<T> = {
+  items: T[];
+  pagination: PaginationMeta;
+};
+
 const apiUrl = import.meta.env.VITE_API_URL ?? "";
+const pageSizeOptions = [3, 5, 10];
 
 export function App() {
   const [models, setModels] = useState<Model[]>([]);
@@ -45,6 +59,22 @@ export function App() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [selectedModelMeta, setSelectedModelMeta] = useState<Model | null>(null);
   const [selectedImage, setSelectedImage] = useState<GalleryItem | null>(null);
+  const [jobsPage, setJobsPage] = useState(1);
+  const [jobsPageSize, setJobsPageSize] = useState(5);
+  const [jobsPagination, setJobsPagination] = useState<PaginationMeta>({
+    page: 1,
+    pageSize: 5,
+    totalItems: 0,
+    totalPages: 1
+  });
+  const [galleryPage, setGalleryPage] = useState(1);
+  const [galleryPageSize, setGalleryPageSize] = useState(5);
+  const [galleryPagination, setGalleryPagination] = useState<PaginationMeta>({
+    page: 1,
+    pageSize: 5,
+    totalItems: 0,
+    totalPages: 1
+  });
   const [form, setForm] = useState({
     prompt: "",
     negativePrompt: "",
@@ -60,17 +90,19 @@ export function App() {
   async function loadData() {
     const [modelsResponse, jobsResponse, galleryResponse] = await Promise.all([
       fetch(`${apiUrl}/api/models`),
-      fetch(`${apiUrl}/api/jobs`),
-      fetch(`${apiUrl}/api/gallery`)
+      fetch(`${apiUrl}/api/jobs?page=${jobsPage}&pageSize=${jobsPageSize}`),
+      fetch(`${apiUrl}/api/gallery?page=${galleryPage}&pageSize=${galleryPageSize}`)
     ]);
 
     const nextModels = await modelsResponse.json();
-    const nextJobs = await jobsResponse.json();
-    const nextGallery = await galleryResponse.json();
+    const nextJobs = await jobsResponse.json() as PaginatedResponse<Job>;
+    const nextGallery = await galleryResponse.json() as PaginatedResponse<GalleryItem>;
 
     setModels(nextModels);
-    setJobs(nextJobs);
-    setGallery(nextGallery);
+    setJobs(nextJobs.items);
+    setJobsPagination(nextJobs.pagination);
+    setGallery(nextGallery.items);
+    setGalleryPagination(nextGallery.pagination);
 
     if (!form.modelId && nextModels[0]) {
       setSelectedModelMeta(nextModels[0]);
@@ -92,7 +124,7 @@ export function App() {
       loadData().catch(console.error);
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [jobsPage, jobsPageSize, galleryPage, galleryPageSize]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -125,6 +157,59 @@ export function App() {
       cfg: nextModel?.configJson?.defaultParams?.cfg ?? current.cfg,
       batchSize: nextModel?.configJson?.defaultParams?.batchSize ?? current.batchSize
     }));
+  }
+
+  function renderPaginationControls(
+    pagination: PaginationMeta,
+    onPageChange: (page: number) => void,
+    onPageSizeChange: (pageSize: number) => void
+  ) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-black/10 pt-4">
+        <div className="flex items-center gap-2 text-sm text-ink/65">
+          <span>Show</span>
+          <div className="flex items-center gap-2">
+            {pageSizeOptions.map((size) => (
+              <button
+                key={size}
+                type="button"
+                className={`rounded-full px-3 py-1 transition ${
+                  pagination.pageSize === size ? "bg-ink text-soft" : "bg-canvas text-ink/70"
+                }`}
+                onClick={() => {
+                  onPageSizeChange(size);
+                  onPageChange(1);
+                }}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-sm">
+          <button
+            type="button"
+            className="rounded-full bg-canvas px-3 py-1 text-ink/70 transition disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={pagination.page <= 1}
+            onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
+          >
+            Prev
+          </button>
+          <span className="text-ink/65">
+            Page {pagination.page} / {pagination.totalPages}
+          </span>
+          <button
+            type="button"
+            className="rounded-full bg-canvas px-3 py-1 text-ink/70 transition disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={pagination.page >= pagination.totalPages}
+            onClick={() => onPageChange(Math.min(pagination.totalPages, pagination.page + 1))}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -255,18 +340,39 @@ export function App() {
               <div className="space-y-3">
                 {jobs.map((job) => (
                   <div key={job.id} className="rounded-3xl border border-black/10 bg-canvas/70 p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <strong className="line-clamp-1">{job.prompt}</strong>
-                      <span className="rounded-full bg-ink px-3 py-1 text-xs uppercase tracking-[0.2em] text-soft">{job.status}</span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-3 text-sm text-ink/65">
-                      <span>Progress: {job.progress}%</span>
-                      <span>Seed: {job.seed ?? "auto"}</span>
-                      <span>{new Date(job.createdAt).toLocaleString()}</span>
+                    <div className="flex items-start gap-4">
+                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white/70">
+                        {job.previewImageUrl ? (
+                          <img
+                            className="h-full w-full object-cover"
+                            src={`${apiUrl}${job.previewImageUrl}`}
+                            alt={job.prompt}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-ink/35">
+                            No image
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-4">
+                          <strong className="line-clamp-2">{job.prompt}</strong>
+                          <span className="shrink-0 rounded-full bg-ink px-3 py-1 text-xs uppercase tracking-[0.2em] text-soft">{job.status}</span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-3 text-sm text-ink/65">
+                          <span>Progress: {job.progress}%</span>
+                          <span>Seed: {job.seed ?? "auto"}</span>
+                          <span>{new Date(job.createdAt).toLocaleString()}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {renderPaginationControls(jobsPagination, setJobsPage, setJobsPageSize)}
             </div>
 
             <div className="rounded-[2rem] bg-white p-6 shadow-[0_10px_50px_rgba(29,29,27,0.08)]">
@@ -293,6 +399,8 @@ export function App() {
                   </article>
                 ))}
               </div>
+
+              {renderPaginationControls(galleryPagination, setGalleryPage, setGalleryPageSize)}
             </div>
           </section>
         </main>

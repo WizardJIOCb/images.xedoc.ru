@@ -32,6 +32,15 @@ async function buildServer() {
     prefix: "/uploads/"
   });
 
+  function parsePagination(query: Record<string, unknown>) {
+    const page = Math.max(1, Number(query.page ?? 1) || 1);
+    const pageSize = Number(query.pageSize ?? 10) || 10;
+    const safePageSize = [3, 5, 10].includes(pageSize) ? pageSize : 10;
+    const offset = (page - 1) * safePageSize;
+
+    return { page, pageSize: safePageSize, offset };
+  }
+
   app.get("/api/health", async () => ({
     ok: true,
     appUrl: env.APP_URL
@@ -41,8 +50,10 @@ async function buildServer() {
     return db.select().from(models).where(eq(models.isActive, true)).orderBy(asc(models.name));
   });
 
-  app.get("/api/gallery", async () => {
-    return db.select({
+  app.get("/api/gallery", async (request) => {
+    const { page, pageSize, offset } = parsePagination(request.query as Record<string, unknown>);
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(generatedImages);
+    const items = await db.select({
       id: generatedImages.id,
       imageUrl: generatedImages.imageUrl,
       thumbnailUrl: generatedImages.thumbnailUrl,
@@ -55,11 +66,47 @@ async function buildServer() {
       .from(generatedImages)
       .innerJoin(generationJobs, eq(generatedImages.jobId, generationJobs.id))
       .orderBy(desc(generatedImages.createdAt))
-      .limit(50);
+      .limit(pageSize)
+      .offset(offset);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        totalItems: Number(count),
+        totalPages: Math.max(1, Math.ceil(Number(count) / pageSize))
+      }
+    };
   });
 
-  app.get("/api/jobs", async () => {
-    return db.select().from(generationJobs).orderBy(desc(generationJobs.createdAt)).limit(50);
+  app.get("/api/jobs", async (request) => {
+    const { page, pageSize, offset } = parsePagination(request.query as Record<string, unknown>);
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(generationJobs);
+    const items = await db.select({
+      id: generationJobs.id,
+      status: generationJobs.status,
+      prompt: generationJobs.prompt,
+      progress: generationJobs.progress,
+      seed: generationJobs.seed,
+      createdAt: generationJobs.createdAt,
+      previewImageUrl: generatedImages.imageUrl
+    })
+      .from(generationJobs)
+      .leftJoin(generatedImages, eq(generatedImages.jobId, generationJobs.id))
+      .orderBy(desc(generationJobs.createdAt))
+      .limit(pageSize)
+      .offset(offset);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        totalItems: Number(count),
+        totalPages: Math.max(1, Math.ceil(Number(count) / pageSize))
+      }
+    };
   });
 
   app.get("/api/jobs/:id", async (request, reply) => {
