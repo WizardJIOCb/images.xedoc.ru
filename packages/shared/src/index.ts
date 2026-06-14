@@ -72,6 +72,7 @@ export const defaultModels = [
     isActive: true,
     config: {
       checkpoint: "sd_xl_base_1.0.safetensors",
+      sizeGb: 6.46,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -92,6 +93,7 @@ export const defaultModels = [
     isActive: true,
     config: {
       checkpoint: "sd_xl_turbo_1.0_fp16.safetensors",
+      sizeGb: 4.76,
       promptLanguage: "en",
       defaultParams: {
         width: 512,
@@ -112,6 +114,7 @@ export const defaultModels = [
     isActive: true,
     config: {
       checkpoint: "sdxl_lightning_4step.safetensors",
+      sizeGb: 6.46,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -133,6 +136,8 @@ export const defaultModels = [
     config: {
       checkpoint: "sdxl_lightning_4step_unet.safetensors",
       baseCheckpoint: "sd_xl_base_1.0.safetensors",
+      sizeGb: 6.46,
+      baseCheckpointSizeGb: 6.46,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -153,6 +158,7 @@ export const defaultModels = [
     isActive: false,
     config: {
       checkpoint: "sd_xl_refiner_1.0.safetensors",
+      sizeGb: 5.78,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -173,6 +179,7 @@ export const defaultModels = [
     isActive: true,
     config: {
       checkpoint: "hunyuan_dit_1.2.safetensors",
+      sizeGb: 10.61,
       promptLanguage: "zh",
       defaultParams: {
         width: 1024,
@@ -193,6 +200,7 @@ export const defaultModels = [
     isActive: false,
     config: {
       checkpoint: "flux1-schnell.safetensors",
+      sizeGb: 23.8,
       promptLanguage: "en",
       defaultParams: {
         width: 1024,

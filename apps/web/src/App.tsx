@@ -6,6 +6,8 @@ type Model = {
   type: string;
   configJson: {
     checkpoint?: string;
+    sizeGb?: number;
+    baseCheckpointSizeGb?: number;
     promptLanguage?: string;
     defaultParams?: {
       width?: number;
@@ -83,6 +85,21 @@ function formatDuration(durationMs?: number | null) {
   }
 
   return `${seconds}s`;
+}
+
+function formatModelSize(model: Model) {
+  const sizeGb = model.configJson?.sizeGb;
+  const baseCheckpointSizeGb = model.configJson?.baseCheckpointSizeGb;
+
+  if (sizeGb == null) {
+    return "";
+  }
+
+  if (baseCheckpointSizeGb != null) {
+    return ` (${sizeGb.toFixed(2)} GB + base ${baseCheckpointSizeGb.toFixed(2)} GB)`;
+  }
+
+  return ` (${sizeGb.toFixed(2)} GB)`;
 }
 
 export function App() {
@@ -308,7 +325,7 @@ export function App() {
                   >
                     {models.map((model) => (
                       <option key={model.id} value={model.id}>
-                        {model.name}
+                        {model.name}{formatModelSize(model)}
                       </option>
                     ))}
                   </select>
