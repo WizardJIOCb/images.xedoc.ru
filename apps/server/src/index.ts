@@ -13,6 +13,34 @@ import { seedDatabase } from "./seed.js";
 import { ensureUploadDirs, saveGeneratedImage, saveSourceImage } from "./storage.js";
 import { maybeTranslatePrompt } from "./translation.js";
 
+function buildEditInstruction(prompt: string) {
+  const normalized = prompt.trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  const lower = normalized.toLowerCase();
+  const alreadyStructured = [
+    "preserve the original",
+    "inside the masked area",
+    "do not change",
+    "same lighting",
+    "same perspective"
+  ].some((token) => lower.includes(token));
+
+  if (alreadyStructured) {
+    return normalized;
+  }
+
+  return [
+    "Preserve the original photo and composition.",
+    "Edit only inside the masked area.",
+    normalized,
+    "Keep the same lighting, perspective, and background.",
+    "Do not change the person outside the masked area."
+  ].join(" ");
+}
+
 async function buildServer() {
   await seedDatabase(env.DATABASE_URL);
   await ensureUploadDirs(env.UPLOAD_DIR);
@@ -251,6 +279,13 @@ async function buildServer() {
       } catch (error) {
         app.log.warn({ error }, "Prompt translation failed, falling back to original text");
       }
+    }
+
+    if (editOnly) {
+      translatedPrompt = {
+        output: buildEditInstruction(translatedPrompt.output),
+        translated: translatedPrompt.translated
+      };
     }
 
     const defaultParams = modelConfig.defaultParams ?? {};

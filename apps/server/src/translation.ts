@@ -6,6 +6,21 @@ type TranslationResult = {
   translated: boolean;
 };
 
+const PROMPT_SUBSTITUTIONS: Array<{ pattern: RegExp; replacement: string }> = [
+  {
+    pattern: /\bkolobok\b/gi,
+    replacement: "small round gingerbread bun character"
+  },
+  {
+    pattern: /колобок/gi,
+    replacement: "small round gingerbread bun character"
+  },
+  {
+    pattern: /\bbun\b/gi,
+    replacement: "small round gingerbread bun character"
+  }
+];
+
 function protectTokens(input: string) {
   const replacements = new Map<string, string>();
   let index = 0;
@@ -23,6 +38,12 @@ function protectTokens(input: string) {
 function restoreTokens(input: string, replacements: Map<string, string>) {
   return Array.from(replacements.entries()).reduce((output, [placeholder, original]) => {
     return output.replaceAll(placeholder, original);
+  }, input);
+}
+
+function applyPromptSubstitutions(input: string) {
+  return PROMPT_SUBSTITUTIONS.reduce((output, rule) => {
+    return output.replace(rule.pattern, rule.replacement);
   }, input);
 }
 
@@ -63,7 +84,7 @@ export async function maybeTranslatePrompt(input: string, targetLanguage: string
   const translated = await translateViaGoogle(protectedText, targetLanguage);
 
   return {
-    output: restoreTokens(translated || input, replacements),
+    output: applyPromptSubstitutions(restoreTokens(translated || input, replacements)),
     translated: translated.length > 0
   };
 }
