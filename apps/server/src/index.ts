@@ -41,6 +41,14 @@ async function buildServer() {
     return { page, pageSize: safePageSize, offset };
   }
 
+  function getGenerationDurationMs(startedAt?: Date | null, completedAt?: Date | null) {
+    if (!startedAt || !completedAt) {
+      return null;
+    }
+
+    return Math.max(0, completedAt.getTime() - startedAt.getTime());
+  }
+
   app.get("/api/health", async () => ({
     ok: true,
     appUrl: env.APP_URL
@@ -59,6 +67,8 @@ async function buildServer() {
       thumbnailUrl: generatedImages.thumbnailUrl,
       metadataJson: generatedImages.metadataJson,
       createdAt: generatedImages.createdAt,
+      startedAt: generationJobs.startedAt,
+      completedAt: generationJobs.completedAt,
       prompt: generationJobs.prompt,
       seed: generationJobs.seed,
       modelId: generationJobs.modelId,
@@ -71,8 +81,13 @@ async function buildServer() {
       .limit(pageSize)
       .offset(offset);
 
+    const itemsWithTiming = items.map((item) => ({
+      ...item,
+      generationDurationMs: getGenerationDurationMs(item.startedAt, item.completedAt)
+    }));
+
     return {
-      items,
+      items: itemsWithTiming,
       pagination: {
         page,
         pageSize,
@@ -92,6 +107,8 @@ async function buildServer() {
       progress: generationJobs.progress,
       seed: generationJobs.seed,
       createdAt: generationJobs.createdAt,
+      startedAt: generationJobs.startedAt,
+      completedAt: generationJobs.completedAt,
       previewImageUrl: generatedImages.imageUrl,
       modelName: models.name
     })
@@ -102,8 +119,13 @@ async function buildServer() {
       .limit(pageSize)
       .offset(offset);
 
+    const itemsWithTiming = items.map((item) => ({
+      ...item,
+      generationDurationMs: getGenerationDurationMs(item.startedAt, item.completedAt)
+    }));
+
     return {
-      items,
+      items: itemsWithTiming,
       pagination: {
         page,
         pageSize,

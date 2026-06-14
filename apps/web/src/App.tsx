@@ -26,6 +26,9 @@ type Job = {
   progress: number;
   seed: number | null;
   createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  generationDurationMs?: number | null;
   previewImageUrl?: string | null;
   modelName?: string;
 };
@@ -37,6 +40,9 @@ type GalleryItem = {
   prompt: string;
   seed: number | null;
   createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  generationDurationMs?: number | null;
   modelName?: string;
 };
 
@@ -54,6 +60,30 @@ type PaginatedResponse<T> = {
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "";
 const pageSizeOptions = [3, 5, 10];
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  return new Date(value).toLocaleString();
+}
+
+function formatDuration(durationMs?: number | null) {
+  if (durationMs == null) {
+    return "—";
+  }
+
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
+}
 
 export function App() {
   const [models, setModels] = useState<Model[]>([]);
@@ -355,7 +385,11 @@ export function App() {
                                 thumbnailUrl: job.previewImageUrl ?? null,
                                 prompt: job.prompt,
                                 seed: job.seed,
-                                createdAt: job.createdAt
+                                createdAt: job.createdAt,
+                                startedAt: job.startedAt,
+                                completedAt: job.completedAt,
+                                generationDurationMs: job.generationDurationMs,
+                                modelName: job.modelName
                               })
                             }
                           >
@@ -382,7 +416,10 @@ export function App() {
                           <span>Model: {job.modelName ?? "Unknown"}</span>
                           <span>Progress: {job.progress}%</span>
                           <span>Seed: {job.seed ?? "auto"}</span>
-                          <span>{new Date(job.createdAt).toLocaleString()}</span>
+                          <span>Queued: {formatDateTime(job.createdAt)}</span>
+                          <span>Start: {formatDateTime(job.startedAt)}</span>
+                          <span>Finish: {formatDateTime(job.completedAt)}</span>
+                          <span>Duration: {formatDuration(job.generationDurationMs)}</span>
                         </div>
                       </div>
                     </div>
@@ -412,7 +449,10 @@ export function App() {
                       <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-ink/60">
                         <span>{item.modelName ?? "Unknown"}</span>
                         <span>Seed {item.seed ?? "auto"}</span>
-                        <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                        <span>Queued {formatDateTime(item.createdAt)}</span>
+                        <span>Start {formatDateTime(item.startedAt)}</span>
+                        <span>Finish {formatDateTime(item.completedAt)}</span>
+                        <span>Duration {formatDuration(item.generationDurationMs)}</span>
                       </div>
                     </div>
                   </article>
@@ -453,7 +493,10 @@ export function App() {
               <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-ink/60">
                 <span>{selectedImage.modelName ?? "Unknown"}</span>
                 <span>Seed {selectedImage.seed ?? "auto"}</span>
-                <span>{new Date(selectedImage.createdAt).toLocaleString()}</span>
+                <span>Queued {formatDateTime(selectedImage.createdAt)}</span>
+                <span>Start {formatDateTime(selectedImage.startedAt)}</span>
+                <span>Finish {formatDateTime(selectedImage.completedAt)}</span>
+                <span>Duration {formatDuration(selectedImage.generationDurationMs)}</span>
               </div>
             </div>
           </div>
