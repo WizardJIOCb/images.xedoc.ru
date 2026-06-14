@@ -13,6 +13,22 @@ const env = {
   workflowRoot: process.env.COMFYUI_WORKFLOW_ROOT
 };
 
+async function isComfyAvailable() {
+  try {
+    const response = await fetch(env.comfyUrl, { method: "GET" });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForComfyAvailable() {
+  while (!(await isComfyAvailable())) {
+    console.error(`ComfyUI is unavailable at ${env.comfyUrl}, waiting before taking new jobs`);
+    await delay(5_000);
+  }
+}
+
 async function api<T>(pathname: string, init?: RequestInit) {
   const response = await fetch(`${env.workerServerUrl}${pathname}`, {
     ...init,
@@ -142,6 +158,7 @@ async function executeJob(job: any) {
 }
 
 async function main() {
+  await waitForComfyAvailable();
   await registerWorker();
   setInterval(() => {
     heartbeat().catch((error) => {
@@ -151,6 +168,7 @@ async function main() {
 
   while (true) {
     try {
+      await waitForComfyAvailable();
       const { job } = await fetchNextJob();
       if (!job) {
         await delay(3000);

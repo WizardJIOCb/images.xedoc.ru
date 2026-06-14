@@ -77,8 +77,14 @@ function Find-WorkerProcessId {
 function Start-ComfyUi {
   $existingPid = Get-PidFromFile $comfyPidFile
   if ($existingPid -and (Test-ProcessAlive $existingPid)) {
-    Write-Host "ComfyUI already running (PID $existingPid)." -ForegroundColor Yellow
-    return
+    if (Wait-HttpOk "http://127.0.0.1:8188" 3) {
+      Write-Host "ComfyUI already running (PID $existingPid)." -ForegroundColor Yellow
+      return
+    }
+
+    Write-Host "ComfyUI process exists but health check failed, restarting it." -ForegroundColor Yellow
+    Stop-Process -Id $existingPid -Force -ErrorAction SilentlyContinue
+    Remove-Item $comfyPidFile -Force -ErrorAction SilentlyContinue
   }
 
   if (Wait-HttpOk "http://127.0.0.1:8188" 3) {
@@ -133,38 +139,35 @@ function Start-Worker {
   }
 
   Remove-Item $workerOutLog, $workerErrLog -Force -ErrorAction SilentlyContinue
-
-  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-  $startInfo.FileName = $nodeExe
-  $startInfo.Arguments = "`"$workerScript`""
-  $startInfo.WorkingDirectory = (Join-Path $ProjectRoot "apps\worker")
-  $startInfo.UseShellExecute = $false
-  $startInfo.RedirectStandardOutput = $true
-  $startInfo.RedirectStandardError = $true
-  $startInfo.CreateNoWindow = $true
-
+  $workerAppRoot = Join-Path $ProjectRoot "apps\worker"
+  $workerEnvEntries = @{}
+  function Quote-PsSingle([string]$Value) {
+    return "'" + ($Value -replace "'", "''") + "'"
+  }
   Get-Content $WorkerEnv | Where-Object { $_ -and -not $_.StartsWith("#") } | ForEach-Object {
     $name, $value = $_ -split "=", 2
-    $startInfo.Environment[$name] = $value
+    if ($name) {
+      $workerEnvEntries[$name] = $value
+    }
   }
 
-  $process = New-Object System.Diagnostics.Process
-  $process.StartInfo = $startInfo
-  $null = $process.Start()
-  $process.BeginOutputReadLine()
-  $process.BeginErrorReadLine()
+  $envAssignments = $workerEnvEntries.GetEnumerator() | ForEach-Object {
+    '$env:{0} = {1}' -f $_.Key, (Quote-PsSingle $_.Value)
+  }
+  $workerCommand = @(
+    '$ErrorActionPreference = ''Stop'''
+    $envAssignments
+    ('Set-Location {0}' -f (Quote-PsSingle $workerAppRoot))
+    ('& {0} {1}' -f (Quote-PsSingle $nodeExe), (Quote-PsSingle $workerScript))
+  ) -join "; "
 
-  Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -Action {
-    if ($EventArgs.Data) {
-      Add-Content -Path $using:workerOutLog -Value $EventArgs.Data
-    }
-  } | Out-Null
-
-  Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -Action {
-    if ($EventArgs.Data) {
-      Add-Content -Path $using:workerErrLog -Value $EventArgs.Data
-    }
-  } | Out-Null
+  $process = Start-Process -FilePath "powershell.exe" `
+    -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", $workerCommand `
+    -WorkingDirectory $workerAppRoot `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $workerOutLog `
+    -RedirectStandardError $workerErrLog `
+    -PassThru
 
   Set-Content -Path $workerPidFile -Value $process.Id -Encoding ascii
   Start-Sleep -Seconds 5
