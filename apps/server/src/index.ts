@@ -377,6 +377,7 @@ async function buildServer() {
     return {
       job: {
         ...queuedJob[0],
+        workflowPath: paramsJson.workflowPath ?? queuedJob[0].workflowPath,
         prompt: paramsJson.effectivePrompt ?? queuedJob[0].prompt,
         negativePrompt: paramsJson.effectiveNegativePrompt ?? queuedJob[0].negativePrompt
       }
