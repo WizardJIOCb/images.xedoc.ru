@@ -9,6 +9,7 @@ type Model = {
     sizeGb?: number;
     baseCheckpointSizeGb?: number;
     supportsReference?: boolean;
+    defaultReferenceDenoise?: number;
     promptLanguage?: string;
     defaultParams?: {
       width?: number;
@@ -293,6 +294,7 @@ export function App() {
     prompt: "",
     negativePrompt: "",
     modelId: "",
+    denoise: 0.35,
     width: 1024,
     height: 1024,
     steps: 30,
@@ -344,6 +346,7 @@ export function App() {
       setForm((current) => ({
         ...current,
         modelId: nextModels[0].id,
+        denoise: nextModels[0].configJson?.defaultReferenceDenoise ?? current.denoise,
         width: nextModels[0].configJson?.defaultParams?.width ?? current.width,
         height: nextModels[0].configJson?.defaultParams?.height ?? current.height,
         steps: nextModels[0].configJson?.defaultParams?.steps ?? current.steps,
@@ -418,6 +421,7 @@ export function App() {
     setForm((current) => ({
       ...current,
       modelId,
+      denoise: nextModel?.configJson?.defaultReferenceDenoise ?? current.denoise,
       width: nextModel?.configJson?.defaultParams?.width ?? current.width,
       height: nextModel?.configJson?.defaultParams?.height ?? current.height,
       steps: nextModel?.configJson?.defaultParams?.steps ?? current.steps,
@@ -599,6 +603,29 @@ export function App() {
                       </p>
                     </div>
                   </div>
+                ) : null}
+
+                {referenceFile ? (
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-sm font-semibold">Strength</span>
+                    <input
+                      className="w-full accent-accent"
+                      type="range"
+                      min="0.1"
+                      max="0.8"
+                      step="0.05"
+                      value={form.denoise}
+                      onChange={(event) => setForm({ ...form, denoise: Number(event.target.value) })}
+                    />
+                    <div className="mt-2 flex items-center justify-between text-xs text-ink/60">
+                      <span>Closer to original</span>
+                      <span>{form.denoise.toFixed(2)}</span>
+                      <span>Stronger redraw</span>
+                    </div>
+                    <span className="mt-2 block text-xs text-ink/60">
+                      Для задач вроде “добавь объект рядом” обычно лучше держать `0.20-0.35`.
+                    </span>
+                  </label>
                 ) : null}
               </div>
 

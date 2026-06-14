@@ -228,6 +228,10 @@ async function buildServer() {
     const sampler = input.sampler || defaultParams.sampler || "euler";
     const scheduler = input.scheduler || defaultParams.scheduler || "normal";
     const batchSize = input.batchSize || defaultParams.batchSize || 1;
+    const defaultDenoise = input.referenceImageUrl
+      ? (modelConfig.defaultReferenceDenoise ?? 0.35)
+      : 1;
+    const denoise = Number.isFinite(input.denoise) ? input.denoise : defaultDenoise;
 
     const workflowPath = getWorkflowPathForRequest(
       selectedModel[0].type,
@@ -250,6 +254,7 @@ async function buildServer() {
         sampler,
         scheduler,
         batchSize,
+        denoise,
         workflowPath,
         modelConfig,
         referenceImageUrl: input.referenceImageUrl ?? null,
