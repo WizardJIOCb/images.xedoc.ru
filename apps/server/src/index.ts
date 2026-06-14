@@ -60,6 +60,17 @@ function isObjectInsertionPrompt(prompt: string) {
   ].some((token) => normalized.includes(token));
 }
 
+function isSoccerBallPrompt(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  return [
+    "soccer ball",
+    "football ball",
+    "football",
+    "мяч",
+    "футбольн"
+  ].some((token) => normalized.includes(token));
+}
+
 function strengthenObjectInsertionPrompt(prompt: string) {
   if (!isObjectInsertionPrompt(prompt)) {
     return prompt;
@@ -84,6 +95,48 @@ function strengthenObjectInsertionPrompt(prompt: string) {
     "Do not leave the masked area empty.",
     "Do not replace the object with dirt, blur, stains, or background texture."
   ].join(" ");
+}
+
+function specializeObjectPrompt(prompt: string) {
+  if (isSoccerBallPrompt(prompt)) {
+    return [
+      prompt,
+      "It must look like a real classic black and white soccer ball.",
+      "Show visible pentagon and hexagon panels, clear seams, and ball texture.",
+      "Do not make it a plain gray sphere or a featureless round blob."
+    ].join(" ");
+  }
+
+  return prompt;
+}
+
+function buildObjectInsertionNegativePrompt(input: string, prompt: string) {
+  if (!isObjectInsertionPrompt(prompt)) {
+    return input;
+  }
+
+  const additions = [
+    "blur",
+    "smudge",
+    "stain",
+    "dirt blob",
+    "featureless sphere",
+    "plain gray ball",
+    "monochrome ball",
+    "stone sphere",
+    "concrete sphere"
+  ];
+
+  if (isSoccerBallPrompt(prompt)) {
+    additions.push(
+      "gray sphere",
+      "smooth gray object",
+      "ball without panels",
+      "ball without seams"
+    );
+  }
+
+  return [input.trim(), additions.join(", ")].filter(Boolean).join(", ");
 }
 
 async function buildServer() {
@@ -347,8 +400,12 @@ async function buildServer() {
 
     if (editOnly) {
       translatedPrompt = {
-        output: strengthenObjectInsertionPrompt(buildEditInstruction(translatedPrompt.output)),
+        output: specializeObjectPrompt(strengthenObjectInsertionPrompt(buildEditInstruction(translatedPrompt.output))),
         translated: translatedPrompt.translated
+      };
+      translatedNegativePrompt = {
+        output: buildObjectInsertionNegativePrompt(translatedNegativePrompt.output, translatedPrompt.output),
+        translated: translatedNegativePrompt.translated
       };
     }
 
@@ -373,7 +430,7 @@ async function buildServer() {
     const batchSize = isObjectInsert ? Math.max(requestedBatchSize, objectInsertionBatchSize) : requestedBatchSize;
     const denoise = isObjectInsert ? Math.max(requestedDenoise, objectInsertionMinDenoise) : requestedDenoise;
     const maskGrow = input.maskImageUrl
-      ? (isObjectInsert ? defaultMaskGrow + 10 : defaultMaskGrow)
+      ? (isObjectInsert ? Math.min(defaultMaskGrow + 2, 22) : defaultMaskGrow)
       : 0;
 
     const workflowPath = getWorkflowPathForRequest(
