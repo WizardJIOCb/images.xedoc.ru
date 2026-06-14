@@ -44,6 +44,7 @@ export function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [selectedModelMeta, setSelectedModelMeta] = useState<Model | null>(null);
+  const [selectedImage, setSelectedImage] = useState<GalleryItem | null>(null);
   const [form, setForm] = useState({
     prompt: "",
     negativePrompt: "",
@@ -276,7 +277,11 @@ export function App() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {gallery.map((item) => (
-                  <article key={item.id} className="overflow-hidden rounded-[1.5rem] border border-black/10 bg-soft">
+                  <article
+                    key={item.id}
+                    className="cursor-pointer overflow-hidden rounded-[1.5rem] border border-black/10 bg-soft transition hover:translate-y-[-2px] hover:shadow-lg"
+                    onClick={() => setSelectedImage(item)}
+                  >
                     <img className="aspect-square w-full object-cover" src={`${apiUrl}${item.imageUrl}`} alt={item.prompt} />
                     <div className="space-y-2 p-4">
                       <p className="line-clamp-2 text-sm">{item.prompt}</p>
@@ -292,6 +297,40 @@ export function App() {
           </section>
         </main>
       </div>
+
+      {selectedImage ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 px-4 py-8 backdrop-blur-sm"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div
+            className="relative max-h-full w-full max-w-6xl overflow-hidden rounded-[2rem] bg-black shadow-[0_20px_80px_rgba(0,0,0,0.45)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-4 top-4 z-10 rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-white"
+              onClick={() => setSelectedImage(null)}
+            >
+              Close
+            </button>
+
+            <img
+              className="max-h-[85vh] w-full object-contain bg-black"
+              src={`${apiUrl}${selectedImage.imageUrl}`}
+              alt={selectedImage.prompt}
+            />
+
+            <div className="space-y-2 bg-soft p-4">
+              <p className="text-sm text-ink/80">{selectedImage.prompt}</p>
+              <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-ink/60">
+                <span>Seed {selectedImage.seed ?? "auto"}</span>
+                <span>{new Date(selectedImage.createdAt).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
