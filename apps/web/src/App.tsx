@@ -300,7 +300,7 @@ function getEditPresets(model: Model | null): EditPreset[] {
       id: "object",
       label: "Add Object",
       description: "Добавить новый объект в подготовленную область.",
-      denoise: strong ? 0.2 : 0.24
+      denoise: strong ? 0.3 : 0.24
     },
     {
       id: "replace",

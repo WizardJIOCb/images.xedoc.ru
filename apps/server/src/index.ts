@@ -41,6 +41,48 @@ function buildEditInstruction(prompt: string) {
   ].join(" ");
 }
 
+function isObjectInsertionPrompt(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  return [
+    "add ",
+    "insert ",
+    "place ",
+    "draw ",
+    "soccer ball",
+    "football",
+    "ball",
+    "object",
+    "колоб",
+    "мяч",
+    "добав",
+    "нарис"
+  ].some((token) => normalized.includes(token));
+}
+
+function strengthenObjectInsertionPrompt(prompt: string) {
+  if (!isObjectInsertionPrompt(prompt)) {
+    return prompt;
+  }
+
+  const lower = prompt.toLowerCase();
+  const alreadyStrong = [
+    "clearly visible",
+    "occupy most of the masked area",
+    "centered in the masked area"
+  ].some((token) => lower.includes(token));
+
+  if (alreadyStrong) {
+    return prompt;
+  }
+
+  return [
+    prompt,
+    "The new object must be clearly visible.",
+    "Place it centered in the masked area.",
+    "Make it occupy most of the masked area with realistic contact shadow."
+  ].join(" ");
+}
+
 async function buildServer() {
   await seedDatabase(env.DATABASE_URL);
   await ensureUploadDirs(env.UPLOAD_DIR);
@@ -283,7 +325,7 @@ async function buildServer() {
 
     if (editOnly) {
       translatedPrompt = {
-        output: buildEditInstruction(translatedPrompt.output),
+        output: strengthenObjectInsertionPrompt(buildEditInstruction(translatedPrompt.output)),
         translated: translatedPrompt.translated
       };
     }
@@ -299,7 +341,10 @@ async function buildServer() {
     const defaultDenoise = input.referenceImageUrl
       ? (modelConfig.defaultReferenceDenoise ?? 0.35)
       : 1;
-    const denoise = Number.isFinite(input.denoise) ? input.denoise : defaultDenoise;
+    const requestedDenoise = Number.isFinite(input.denoise) ? input.denoise : defaultDenoise;
+    const denoise = editOnly && isObjectInsertionPrompt(translatedPrompt.output)
+      ? Math.max(requestedDenoise, 0.28)
+      : requestedDenoise;
 
     const workflowPath = getWorkflowPathForRequest(
       selectedModel[0].type,
