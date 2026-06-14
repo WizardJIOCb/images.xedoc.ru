@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 type Model = {
   id: string;
@@ -299,7 +299,12 @@ export function App() {
     batchSize: 1
   });
   const [submitting, setSubmitting] = useState(false);
+  const formRef = useRef(form);
   const presets = getModelPresets(selectedModelMeta);
+
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
 
   async function loadData() {
     const [modelsResponse, jobsResponse, galleryResponse] = await Promise.all([
@@ -318,7 +323,7 @@ export function App() {
     setGallery(nextGallery.items);
     setGalleryPagination(nextGallery.pagination);
 
-    if (!form.modelId && nextModels[0]) {
+    if (!formRef.current.modelId && nextModels[0]) {
       setSelectedModelMeta(nextModels[0]);
       setForm((current) => ({
         ...current,
