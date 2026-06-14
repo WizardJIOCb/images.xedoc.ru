@@ -333,18 +333,19 @@ async function buildServer() {
     const defaultParams = modelConfig.defaultParams ?? {};
     const width = input.width || defaultParams.width || 1024;
     const height = input.height || defaultParams.height || 1024;
-    const steps = input.steps || defaultParams.steps || 30;
+    const requestedSteps = input.steps || defaultParams.steps || 30;
     const cfg = Number.isFinite(input.cfg) ? input.cfg : (defaultParams.cfg ?? 7);
     const sampler = input.sampler || defaultParams.sampler || "euler";
     const scheduler = input.scheduler || defaultParams.scheduler || "normal";
-    const batchSize = input.batchSize || defaultParams.batchSize || 1;
+    const requestedBatchSize = input.batchSize || defaultParams.batchSize || 1;
     const defaultDenoise = input.referenceImageUrl
       ? (modelConfig.defaultReferenceDenoise ?? 0.35)
       : 1;
     const requestedDenoise = Number.isFinite(input.denoise) ? input.denoise : defaultDenoise;
-    const denoise = editOnly && isObjectInsertionPrompt(translatedPrompt.output)
-      ? Math.max(requestedDenoise, 0.28)
-      : requestedDenoise;
+    const isObjectInsert = editOnly && isObjectInsertionPrompt(translatedPrompt.output);
+    const steps = isObjectInsert ? Math.max(requestedSteps, 36) : requestedSteps;
+    const batchSize = isObjectInsert ? Math.max(requestedBatchSize, 3) : requestedBatchSize;
+    const denoise = isObjectInsert ? Math.max(requestedDenoise, 0.38) : requestedDenoise;
 
     const workflowPath = getWorkflowPathForRequest(
       selectedModel[0].type,
