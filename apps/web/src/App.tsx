@@ -4,6 +4,19 @@ type Model = {
   id: string;
   name: string;
   type: string;
+  configJson: {
+    checkpoint?: string;
+    promptLanguage?: string;
+    defaultParams?: {
+      width?: number;
+      height?: number;
+      steps?: number;
+      cfg?: number;
+      sampler?: string;
+      scheduler?: string;
+      batchSize?: number;
+    };
+  };
 };
 
 type Job = {
@@ -30,6 +43,7 @@ export function App() {
   const [models, setModels] = useState<Model[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [selectedModelMeta, setSelectedModelMeta] = useState<Model | null>(null);
   const [form, setForm] = useState({
     prompt: "",
     negativePrompt: "",
@@ -58,7 +72,16 @@ export function App() {
     setGallery(nextGallery);
 
     if (!form.modelId && nextModels[0]) {
-      setForm((current) => ({ ...current, modelId: nextModels[0].id }));
+      setSelectedModelMeta(nextModels[0]);
+      setForm((current) => ({
+        ...current,
+        modelId: nextModels[0].id,
+        width: nextModels[0].configJson?.defaultParams?.width ?? current.width,
+        height: nextModels[0].configJson?.defaultParams?.height ?? current.height,
+        steps: nextModels[0].configJson?.defaultParams?.steps ?? current.steps,
+        cfg: nextModels[0].configJson?.defaultParams?.cfg ?? current.cfg,
+        batchSize: nextModels[0].configJson?.defaultParams?.batchSize ?? current.batchSize
+      }));
     }
   }
 
@@ -87,6 +110,20 @@ export function App() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleModelChange(modelId: string) {
+    const nextModel = models.find((model) => model.id === modelId) ?? null;
+    setSelectedModelMeta(nextModel);
+    setForm((current) => ({
+      ...current,
+      modelId,
+      width: nextModel?.configJson?.defaultParams?.width ?? current.width,
+      height: nextModel?.configJson?.defaultParams?.height ?? current.height,
+      steps: nextModel?.configJson?.defaultParams?.steps ?? current.steps,
+      cfg: nextModel?.configJson?.defaultParams?.cfg ?? current.cfg,
+      batchSize: nextModel?.configJson?.defaultParams?.batchSize ?? current.batchSize
+    }));
   }
 
   return (
@@ -149,7 +186,7 @@ export function App() {
                   <select
                     className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3"
                     value={form.modelId}
-                    onChange={(event) => setForm({ ...form, modelId: event.target.value })}
+                    onChange={(event) => handleModelChange(event.target.value)}
                   >
                     {models.map((model) => (
                       <option key={model.id} value={model.id}>
@@ -196,6 +233,12 @@ export function App() {
               >
                 {submitting ? "Отправляем задачу..." : "Generate"}
               </button>
+
+              {selectedModelMeta?.configJson?.promptLanguage === "en" ? (
+                <p className="text-sm text-ink/65">
+                  Russian prompts are translated to English automatically for this model.
+                </p>
+              ) : null}
             </form>
           </section>
 

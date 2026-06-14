@@ -69,8 +69,59 @@ export const defaultModels = [
     type: "sdxl",
     provider: "comfyui",
     workflowPath: "workflows/sdxl.json",
+    isActive: true,
     config: {
-      checkpoint: "sd_xl_base_1.0.safetensors"
+      checkpoint: "sd_xl_base_1.0.safetensors",
+      promptLanguage: "en",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 30,
+        cfg: 7,
+        sampler: "euler",
+        scheduler: "normal",
+        batchSize: 1
+      }
+    }
+  },
+  {
+    name: "SDXL Turbo",
+    type: "sdxl-turbo",
+    provider: "comfyui",
+    workflowPath: "workflows/sdxl-turbo.json",
+    isActive: true,
+    config: {
+      checkpoint: "sd_xl_turbo_1.0_fp16.safetensors",
+      promptLanguage: "en",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 4,
+        cfg: 2,
+        sampler: "euler_ancestral",
+        scheduler: "normal",
+        batchSize: 1
+      }
+    }
+  },
+  {
+    name: "SDXL Refiner",
+    type: "sdxl-refiner",
+    provider: "comfyui",
+    workflowPath: "workflows/sdxl-refiner.json",
+    isActive: false,
+    config: {
+      checkpoint: "sd_xl_refiner_1.0.safetensors",
+      promptLanguage: "en",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 20,
+        cfg: 6,
+        sampler: "euler",
+        scheduler: "normal",
+        batchSize: 1
+      }
     }
   },
   {
@@ -80,7 +131,17 @@ export const defaultModels = [
     workflowPath: "workflows/flux-schnell.json",
     isActive: false,
     config: {
-      checkpoint: "flux1-schnell.safetensors"
+      checkpoint: "flux1-schnell.safetensors",
+      promptLanguage: "en",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 4,
+        cfg: 1,
+        sampler: "euler",
+        scheduler: "normal",
+        batchSize: 1
+      }
     }
   }
 ] as const;

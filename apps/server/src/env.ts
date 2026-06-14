@@ -8,7 +8,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string(),
   REDIS_URL: z.string(),
   UPLOAD_DIR: z.string().default("./uploads"),
-  WORKER_SECRET: z.string().default("change_me")
+  WORKER_SECRET: z.string().default("change_me"),
+  PROMPT_TRANSLATION_ENABLED: z.coerce.boolean().default(true),
+  PROMPT_TRANSLATION_TARGET: z.string().default("en")
 });
 
 export const env = envSchema.parse(process.env);

@@ -11,6 +11,7 @@ import { env } from "./env.js";
 import { createQueue } from "./queue.js";
 import { seedDatabase } from "./seed.js";
 import { ensureUploadDirs, saveGeneratedImage } from "./storage.js";
+import { maybeTranslatePrompt } from "./translation.js";
 
 async function buildServer() {
   await seedDatabase(env.DATABASE_URL);
@@ -86,6 +87,21 @@ async function buildServer() {
       return reply.code(404).send({ message: "Model not found" });
     }
 
+    const modelConfig = selectedModel[0].configJson as Record<string, any>;
+    const promptLanguage = modelConfig.promptLanguage ?? "en";
+    const shouldTranslate = env.PROMPT_TRANSLATION_ENABLED && promptLanguage === "en";
+    let translatedPrompt = { output: input.prompt, translated: false };
+    let translatedNegativePrompt = { output: input.negativePrompt, translated: false };
+
+    if (shouldTranslate) {
+      try {
+        translatedPrompt = await maybeTranslatePrompt(input.prompt, env.PROMPT_TRANSLATION_TARGET);
+        translatedNegativePrompt = await maybeTranslatePrompt(input.negativePrompt, env.PROMPT_TRANSLATION_TARGET);
+      } catch (error) {
+        app.log.warn({ error }, "Prompt translation failed, falling back to original text");
+      }
+    }
+
     const [job] = await db.insert(generationJobs).values({
       userId: adminUser[0].id,
       modelId: input.modelId,
@@ -102,7 +118,12 @@ async function buildServer() {
         scheduler: input.scheduler,
         batchSize: input.batchSize,
         workflowPath: selectedModel[0].workflowPath,
-        modelConfig: selectedModel[0].configJson
+        modelConfig,
+        effectivePrompt: translatedPrompt.output,
+        effectiveNegativePrompt: translatedNegativePrompt.output,
+        translatedPrompt: translatedPrompt.translated ? translatedPrompt.output : null,
+        translatedNegativePrompt: translatedNegativePrompt.translated ? translatedNegativePrompt.output : null,
+        translationApplied: translatedPrompt.translated || translatedNegativePrompt.translated
       },
       seed: input.seed ?? Math.floor(Math.random() * 2147483647)
     }).returning();
@@ -185,11 +206,19 @@ async function buildServer() {
       return { job: null };
     }
 
+    const paramsJson = queuedJob[0].paramsJson as Record<string, any>;
+
     await db.update(generationJobs).set({
       status: "assigned"
     }).where(and(eq(generationJobs.id, queuedJob[0].id), eq(generationJobs.status, "queued")));
 
-    return { job: queuedJob[0] };
+    return {
+      job: {
+        ...queuedJob[0],
+        prompt: paramsJson.effectivePrompt ?? queuedJob[0].prompt,
+        negativePrompt: paramsJson.effectiveNegativePrompt ?? queuedJob[0].negativePrompt
+      }
+    };
   });
 
   app.post("/api/worker/jobs/:id/status", async (request, reply) => {
