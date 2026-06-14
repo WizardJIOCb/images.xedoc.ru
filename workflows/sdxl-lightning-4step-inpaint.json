@@ -96,11 +96,31 @@
     },
     "class_type": "VAEDecode"
   },
+  "15": {
+    "inputs": {
+      "destination": [
+        "12",
+        0
+      ],
+      "source": [
+        "8",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "ImageCompositeMasked"
+  },
   "9": {
     "inputs": {
       "filename_prefix": "images-xedoc-lightning4-inpaint",
       "images": [
-        "8",
+        "15",
         0
       ]
     },
