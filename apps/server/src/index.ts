@@ -65,6 +65,8 @@ async function buildServer() {
           return "workflows/sdxl-lightning-4step-inpaint.json";
         case "sdxl-lightning-unet":
           return "workflows/sdxl-lightning-4step-unet-inpaint.json";
+        case "sdxl-inpaint-diffusers":
+          return "workflows/sdxl-diffusers-inpaint.json";
         default:
           return defaultWorkflowPath;
       }
@@ -218,6 +220,8 @@ async function buildServer() {
     const modelConfig = selectedModel[0].configJson as Record<string, any>;
     const supportsReference = modelConfig.supportsReference === true;
     const supportsInpaint = modelConfig.supportsInpaint === true;
+    const editOnly = modelConfig.editOnly === true;
+    const requiresMask = modelConfig.requiresMask === true;
 
     if (input.referenceImageUrl && !supportsReference) {
       return reply.code(400).send({ message: "Selected model does not support reference images yet" });
@@ -225,6 +229,14 @@ async function buildServer() {
 
     if (input.maskImageUrl && (!input.referenceImageUrl || !supportsInpaint)) {
       return reply.code(400).send({ message: "Selected model does not support masked editing yet" });
+    }
+
+    if (editOnly && (!input.referenceImageUrl || !input.maskImageUrl)) {
+      return reply.code(400).send({ message: "Selected model requires both a reference image and a mask" });
+    }
+
+    if (requiresMask && input.referenceImageUrl && !input.maskImageUrl) {
+      return reply.code(400).send({ message: "Selected model requires a mask for image editing" });
     }
 
     const promptLanguage = modelConfig.promptLanguage ?? "en";

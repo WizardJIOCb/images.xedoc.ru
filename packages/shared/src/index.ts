@@ -78,6 +78,7 @@ export const defaultModels = [
       sizeGb: 6.46,
       supportsReference: true,
       supportsInpaint: true,
+      editingTier: "standard",
       defaultReferenceDenoise: 0.32,
       promptLanguage: "en",
       defaultParams: {
@@ -102,6 +103,7 @@ export const defaultModels = [
       sizeGb: 4.76,
       supportsReference: true,
       supportsInpaint: true,
+      editingTier: "standard",
       defaultReferenceDenoise: 0.28,
       promptLanguage: "en",
       defaultParams: {
@@ -126,6 +128,7 @@ export const defaultModels = [
       sizeGb: 6.46,
       supportsReference: true,
       supportsInpaint: true,
+      editingTier: "standard",
       defaultReferenceDenoise: 0.3,
       promptLanguage: "en",
       defaultParams: {
@@ -152,6 +155,7 @@ export const defaultModels = [
       baseCheckpointSizeGb: 6.46,
       supportsReference: true,
       supportsInpaint: true,
+      editingTier: "standard",
       defaultReferenceDenoise: 0.3,
       promptLanguage: "en",
       defaultParams: {
@@ -176,6 +180,7 @@ export const defaultModels = [
       sizeGb: 5.78,
       supportsReference: false,
       supportsInpaint: false,
+      editingTier: "standard",
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
@@ -199,6 +204,7 @@ export const defaultModels = [
       sizeGb: 10.61,
       supportsReference: false,
       supportsInpaint: false,
+      editingTier: "standard",
       promptLanguage: "zh",
       defaultParams: {
         width: 1024,
@@ -222,12 +228,40 @@ export const defaultModels = [
       sizeGb: 23.8,
       supportsReference: false,
       supportsInpaint: false,
+      editingTier: "strong",
       promptLanguage: "en",
       defaultParams: {
         width: 1024,
         height: 1024,
         steps: 4,
         cfg: 1,
+        sampler: "euler",
+        scheduler: "normal",
+        batchSize: 1
+      }
+    }
+  },
+  {
+    name: "SDXL Inpaint 0.1",
+    type: "sdxl-inpaint-diffusers",
+    provider: "comfyui",
+    workflowPath: "workflows/sdxl-diffusers-inpaint.json",
+    isActive: true,
+    config: {
+      modelPath: "stable-diffusion-xl-1.0-inpainting-0.1",
+      sizeGb: 6.03,
+      supportsReference: true,
+      supportsInpaint: true,
+      requiresMask: true,
+      editOnly: true,
+      editingTier: "strong",
+      defaultReferenceDenoise: 0.2,
+      promptLanguage: "en",
+      defaultParams: {
+        width: 1024,
+        height: 1024,
+        steps: 30,
+        cfg: 6,
         sampler: "euler",
         scheduler: "normal",
         batchSize: 1

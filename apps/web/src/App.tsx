@@ -6,10 +6,14 @@ type Model = {
   type: string;
   configJson: {
     checkpoint?: string;
+    modelPath?: string;
     sizeGb?: number;
     baseCheckpointSizeGb?: number;
     supportsReference?: boolean;
     supportsInpaint?: boolean;
+    requiresMask?: boolean;
+    editOnly?: boolean;
+    editingTier?: "standard" | "strong";
     defaultReferenceDenoise?: number;
     promptLanguage?: string;
     defaultParams?: {
@@ -74,6 +78,19 @@ type GenerationPreset = {
     cfg: number;
     batchSize: number;
   };
+};
+
+type EditPreset = {
+  id: string;
+  label: string;
+  description: string;
+  denoise: number;
+};
+
+type PromptTemplate = {
+  id: string;
+  label: string;
+  text: string;
 };
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "";
@@ -269,6 +286,73 @@ function getModelPresets(model: Model | null): GenerationPreset[] {
   }
 }
 
+function getEditPresets(model: Model | null): EditPreset[] {
+  const strong = model?.configJson?.editingTier === "strong";
+
+  return [
+    {
+      id: "precise",
+      label: "Precise Fix",
+      description: "Минимальные изменения для мелких правок и ретуши.",
+      denoise: strong ? 0.16 : 0.18
+    },
+    {
+      id: "object",
+      label: "Add Object",
+      description: "Добавить новый объект в подготовленную область.",
+      denoise: strong ? 0.2 : 0.24
+    },
+    {
+      id: "replace",
+      label: "Replace Area",
+      description: "Заменить заметный участок, сохранив остальную сцену.",
+      denoise: strong ? 0.28 : 0.34
+    },
+    {
+      id: "redraw",
+      label: "Big Redraw",
+      description: "Сильнее перерисовать выбранную область.",
+      denoise: strong ? 0.42 : 0.5
+    }
+  ];
+}
+
+function getPromptTemplates(): PromptTemplate[] {
+  return [
+    {
+      id: "add-object",
+      label: "Add Object",
+      text: "Сохрани исходную сцену без изменений. В закрашенной области добавь [объект], реалистично, правильная перспектива, тот же свет, без изменения человека и фона."
+    },
+    {
+      id: "replace-object",
+      label: "Replace Area",
+      text: "Сохрани исходную сцену и композицию. В закрашенной области замени текущий объект на [новый объект], аккуратно впиши в сцену, тот же ракурс и освещение."
+    },
+    {
+      id: "background-fix",
+      label: "Repair Background",
+      text: "Сохрани исходную сцену. В закрашенной области аккуратно дорисуй фон в том же стиле, с тем же светом и перспективой, без новых лишних объектов."
+    }
+  ];
+}
+
+function getEditModeLabel(model: Model | null, hasMask: boolean) {
+  if (!model) {
+    return "Text-to-image";
+  }
+
+  if (hasMask && model.configJson?.supportsInpaint) {
+    return model.configJson?.editingTier === "strong" ? "Strong Inpaint" : "Inpaint";
+  }
+
+  if (model.configJson?.supportsReference) {
+    return "Reference Img2Img";
+  }
+
+  return "Text-to-image";
+}
+
 export function App() {
   const [models, setModels] = useState<Model[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -308,10 +392,14 @@ export function App() {
   const [referenceImageSize, setReferenceImageSize] = useState<{ width: number; height: number } | null>(null);
   const [maskDirty, setMaskDirty] = useState(false);
   const [brushSize, setBrushSize] = useState(48);
+  const [toolMode, setToolMode] = useState<"brush" | "eraser">("brush");
   const formRef = useRef(form);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawingMaskRef = useRef(false);
+  const lastMaskPointRef = useRef<{ x: number; y: number } | null>(null);
   const presets = getModelPresets(selectedModelMeta);
+  const editPresets = getEditPresets(selectedModelMeta);
+  const promptTemplates = getPromptTemplates();
 
   useEffect(() => {
     formRef.current = form;
@@ -435,7 +523,24 @@ export function App() {
 
           exportContext.fillStyle = "black";
           exportContext.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-          exportContext.drawImage(sourceCanvas, 0, 0);
+          const sourceContext = sourceCanvas.getContext("2d");
+          if (!sourceContext) {
+            resolve(null);
+            return;
+          }
+
+          const sourceImage = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+          const exportImage = exportContext.createImageData(sourceCanvas.width, sourceCanvas.height);
+
+          for (let index = 0; index < sourceImage.data.length; index += 4) {
+            const alpha = sourceImage.data[index + 3];
+            exportImage.data[index] = alpha;
+            exportImage.data[index + 1] = alpha;
+            exportImage.data[index + 2] = alpha;
+            exportImage.data[index + 3] = 255;
+          }
+
+          exportContext.putImageData(exportImage, 0, 0);
           exportCanvas.toBlob((blob) => resolve(blob), "image/png");
         });
 
@@ -501,10 +606,34 @@ export function App() {
     const y = (event.clientY - rect.top) * scaleY;
 
     const brushRadius = (brushSize * (scaleX + scaleY)) / 4;
-    context.fillStyle = "white";
+    context.save();
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = brushRadius * 2;
+
+    if (toolMode === "eraser") {
+      context.globalCompositeOperation = "destination-out";
+      context.strokeStyle = "rgba(0, 0, 0, 1)";
+      context.fillStyle = "rgba(0, 0, 0, 1)";
+    } else {
+      context.globalCompositeOperation = "source-over";
+      context.strokeStyle = "rgba(232, 93, 4, 0.55)";
+      context.fillStyle = "rgba(232, 93, 4, 0.55)";
+    }
+
+    const lastPoint = lastMaskPointRef.current;
+    if (lastPoint) {
+      context.beginPath();
+      context.moveTo(lastPoint.x, lastPoint.y);
+      context.lineTo(x, y);
+      context.stroke();
+    }
+
     context.beginPath();
     context.arc(x, y, brushRadius, 0, Math.PI * 2);
     context.fill();
+    context.restore();
+    lastMaskPointRef.current = { x, y };
     setMaskDirty(true);
   }
 
@@ -576,6 +705,14 @@ export function App() {
     );
   }
 
+  const isEditOnlyModel = selectedModelMeta?.configJson?.editOnly === true;
+  const requiresMask = selectedModelMeta?.configJson?.requiresMask === true;
+  const activeModeLabel = getEditModeLabel(selectedModelMeta, maskDirty);
+  const canSubmit = Boolean(
+    form.modelId
+    && (!isEditOnlyModel || (referenceFile && maskDirty))
+  );
+
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <div className="mx-auto max-w-7xl px-4 py-10 md:px-8">
@@ -634,17 +771,32 @@ export function App() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold">Reference Image</p>
+                    <p className="mt-2 text-xs text-ink/60">
+                      {isEditOnlyModel
+                        ? "У выбранной модели обязательны и референс, и маска."
+                        : "Если есть маска, сервис использует inpaint вместо обычного reference img2img."}
+                    </p>
                     <p className="mt-1 text-xs text-ink/60">
                       Можно прикрепить картинку и сделать генерацию на её основе через img2img.
                     </p>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] ${
-                    selectedModelMeta?.configJson?.supportsReference
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-amber-100 text-amber-800"
-                  }`}>
-                    {selectedModelMeta?.configJson?.supportsReference ? "Supported" : "Text only"}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-ink px-3 py-1 text-xs uppercase tracking-[0.2em] text-soft">
+                      {activeModeLabel}
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] ${
+                      selectedModelMeta?.configJson?.supportsReference
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}>
+                      {selectedModelMeta?.configJson?.supportsReference ? "Supported" : "Text only"}
+                    </span>
+                    {selectedModelMeta?.configJson?.editingTier === "strong" ? (
+                      <span className="rounded-full bg-sky-100 px-3 py-1 text-xs uppercase tracking-[0.2em] text-sky-800">
+                        Strong Edit
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
@@ -661,6 +813,8 @@ export function App() {
 
                       setReferenceFile(nextFile);
                       setMaskDirty(false);
+                      setToolMode("brush");
+                      lastMaskPointRef.current = null;
                       if (nextFile) {
                         const nextPreviewUrl = URL.createObjectURL(nextFile);
                         setReferencePreviewUrl(nextPreviewUrl);
@@ -692,6 +846,8 @@ export function App() {
                         setReferencePreviewUrl(null);
                         setReferenceImageSize(null);
                         setMaskDirty(false);
+                        setToolMode("brush");
+                        lastMaskPointRef.current = null;
                       }}
                     >
                       Remove
@@ -709,8 +865,27 @@ export function App() {
                     <div className="text-xs text-ink/65">
                       <p>{referenceFile?.name}</p>
                       <p className="mt-1">
+                        `SDXL Base`, `SDXL Turbo`, `SDXL Lightning 4step`, `SDXL Lightning 4step UNet` и edit-only модели используют это изображение как основу.
+                      </p>
+                      <p className="mt-1">
                         Сейчас референс поддерживают `SDXL Base`, `SDXL Turbo`, `SDXL Lightning 4step` и `SDXL Lightning 4step UNet`.
                       </p>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-black/10 bg-white/70 p-3">
+                      <p className="text-sm font-semibold">Prompt Templates</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {promptTemplates.map((template) => (
+                          <button
+                            key={template.id}
+                            type="button"
+                            className="rounded-full bg-canvas px-3 py-1 text-xs uppercase tracking-[0.2em] text-ink/75 transition hover:bg-canvas/80"
+                            onClick={() => setForm((current) => ({ ...current, prompt: template.text }))}
+                          >
+                            {template.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : null}
@@ -738,9 +913,31 @@ export function App() {
                           }
                           context.clearRect(0, 0, canvas.width, canvas.height);
                           setMaskDirty(false);
+                          lastMaskPointRef.current = null;
                         }}
                       >
                         Clear mask
+                      </button>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] transition ${
+                          toolMode === "brush" ? "bg-accent text-white" : "bg-canvas text-ink/75"
+                        }`}
+                        onClick={() => setToolMode("brush")}
+                      >
+                        Brush
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] transition ${
+                          toolMode === "eraser" ? "bg-ink text-soft" : "bg-canvas text-ink/75"
+                        }`}
+                        onClick={() => setToolMode("eraser")}
+                      >
+                        Eraser
                       </button>
                     </div>
 
@@ -757,6 +954,30 @@ export function App() {
                       />
                     </label>
 
+                    <div className="mt-3 rounded-2xl border border-black/10 bg-white/70 p-3">
+                      <p className="text-sm font-semibold">Edit Presets</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {editPresets.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className="rounded-full bg-ink px-3 py-1 text-xs uppercase tracking-[0.2em] text-soft transition hover:opacity-90"
+                            onClick={() => setForm((current) => ({ ...current, denoise: preset.denoise }))}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-3 space-y-2 text-xs text-ink/65">
+                        {editPresets.map((preset) => (
+                          <div key={`${preset.id}-hint`} className="rounded-2xl bg-canvas/80 px-3 py-2">
+                            <strong className="mr-2 text-ink">{preset.label}:</strong>
+                            {preset.description} `Strength {preset.denoise.toFixed(2)}`
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="mt-4 overflow-hidden rounded-2xl border border-black/10 bg-black/5">
                       <div className="relative">
                         <img
@@ -769,6 +990,7 @@ export function App() {
                           className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
                           onPointerDown={(event) => {
                             isDrawingMaskRef.current = true;
+                            lastMaskPointRef.current = null;
                             event.currentTarget.setPointerCapture(event.pointerId);
                             drawMask(event);
                           }}
@@ -779,10 +1001,12 @@ export function App() {
                           }}
                           onPointerUp={(event) => {
                             isDrawingMaskRef.current = false;
+                            lastMaskPointRef.current = null;
                             event.currentTarget.releasePointerCapture(event.pointerId);
                           }}
                           onPointerLeave={() => {
                             isDrawingMaskRef.current = false;
+                            lastMaskPointRef.current = null;
                           }}
                         />
                       </div>
@@ -790,6 +1014,8 @@ export function App() {
 
                     <div className="mt-3 flex flex-wrap gap-3 text-xs text-ink/60">
                       <span>{maskDirty ? "Mask ready" : "No mask yet"}</span>
+                      <span>Brush добавляет зону редактирования, Eraser убирает её обратно.</span>
+                      {requiresMask ? <span>Для этой модели маска обязательна.</span> : null}
                       <span>Белым рисуешь область, которую можно менять</span>
                     </div>
                   </div>
@@ -814,6 +1040,9 @@ export function App() {
                     </div>
                     <span className="mt-2 block text-xs text-ink/60">
                       Для задач вроде “добавь объект рядом” обычно лучше держать `0.20-0.35`.
+                    </span>
+                    <span className="mt-2 block text-xs text-ink/60">
+                      Для точечной вставки объекта чаще всего лучше стартовать с `0.15-0.25`, а не с высоких значений.
                     </span>
                   </label>
                 ) : null}
@@ -912,10 +1141,16 @@ export function App() {
               <button
                 type="submit"
                 className="w-full rounded-full bg-accent px-6 py-4 text-lg font-semibold text-white transition hover:translate-y-[-1px] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={submitting || !form.modelId}
+                disabled={submitting || !canSubmit}
               >
                 {submitting ? "Отправляем задачу..." : "Generate"}
               </button>
+
+              {isEditOnlyModel && (!referenceFile || !maskDirty) ? (
+                <p className="text-sm text-ink/65">
+                  Для `edit-only` модели сначала загрузи референс и нарисуй маску.
+                </p>
+              ) : null}
 
               {selectedModelMeta?.configJson?.promptLanguage === "en" ? (
                 <p className="text-sm text-ink/65">
