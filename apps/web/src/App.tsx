@@ -343,11 +343,26 @@ export function App() {
                     <div className="flex items-start gap-4">
                       <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white/70">
                         {job.previewImageUrl ? (
-                          <img
-                            className="h-full w-full object-cover"
-                            src={`${apiUrl}${job.previewImageUrl}`}
-                            alt={job.prompt}
-                          />
+                          <button
+                            type="button"
+                            className="block h-full w-full"
+                            onClick={() =>
+                              setSelectedImage({
+                                id: job.id,
+                                imageUrl: job.previewImageUrl ?? "",
+                                thumbnailUrl: job.previewImageUrl ?? null,
+                                prompt: job.prompt,
+                                seed: job.seed,
+                                createdAt: job.createdAt
+                              })
+                            }
+                          >
+                            <img
+                              className="h-full w-full object-cover"
+                              src={`${apiUrl}${job.previewImageUrl}`}
+                              alt={job.prompt}
+                            />
+                          </button>
                         ) : (
                           <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-ink/35">
                             No image
