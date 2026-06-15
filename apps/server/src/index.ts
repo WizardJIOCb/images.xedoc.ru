@@ -60,17 +60,6 @@ function isObjectInsertionPrompt(prompt: string) {
   ].some((token) => normalized.includes(token));
 }
 
-function isSoccerBallPrompt(prompt: string) {
-  const normalized = prompt.toLowerCase();
-  return [
-    "soccer ball",
-    "football ball",
-    "football",
-    "мяч",
-    "футбольн"
-  ].some((token) => normalized.includes(token));
-}
-
 function strengthenObjectInsertionPrompt(prompt: string) {
   if (!isObjectInsertionPrompt(prompt)) {
     return prompt;
@@ -97,19 +86,6 @@ function strengthenObjectInsertionPrompt(prompt: string) {
   ].join(" ");
 }
 
-function specializeObjectPrompt(prompt: string) {
-  if (isSoccerBallPrompt(prompt)) {
-    return [
-      prompt,
-      "It must look like a real classic black and white soccer ball.",
-      "Show visible pentagon and hexagon panels, clear seams, and ball texture.",
-      "Do not make it a plain gray sphere or a featureless round blob."
-    ].join(" ");
-  }
-
-  return prompt;
-}
-
 function buildObjectInsertionNegativePrompt(input: string, prompt: string) {
   if (!isObjectInsertionPrompt(prompt)) {
     return input;
@@ -127,16 +103,25 @@ function buildObjectInsertionNegativePrompt(input: string, prompt: string) {
     "concrete sphere"
   ];
 
-  if (isSoccerBallPrompt(prompt)) {
-    additions.push(
-      "gray sphere",
-      "smooth gray object",
-      "ball without panels",
-      "ball without seams"
-    );
+  return [input.trim(), additions.join(", ")].filter(Boolean).join(", ");
+}
+
+function buildObjectReferenceInstruction(prompt: string) {
+  const normalized = prompt.trim();
+  if (!normalized) {
+    return normalized;
   }
 
-  return [input.trim(), additions.join(", ")].filter(Boolean).join(", ");
+  const lower = normalized.toLowerCase();
+  if (lower.includes("object reference image") || lower.includes("attached object reference")) {
+    return normalized;
+  }
+
+  return [
+    normalized,
+    "Use the attached object reference image as the object to place inside the masked area.",
+    "Keep the object's recognizable shape, colors, and major details while adapting lighting and perspective to the scene."
+  ].join(" ");
 }
 
 async function buildServer() {
@@ -376,6 +361,10 @@ async function buildServer() {
       return reply.code(400).send({ message: "Selected model does not support masked editing yet" });
     }
 
+    if (input.objectReferenceImageUrl && (!input.referenceImageUrl || !input.maskImageUrl)) {
+      return reply.code(400).send({ message: "Object reference mode requires both a base reference image and a mask" });
+    }
+
     if (editOnly && (!input.referenceImageUrl || !input.maskImageUrl)) {
       return reply.code(400).send({ message: "Selected model requires both a reference image and a mask" });
     }
@@ -400,12 +389,19 @@ async function buildServer() {
 
     if (editOnly) {
       translatedPrompt = {
-        output: specializeObjectPrompt(strengthenObjectInsertionPrompt(buildEditInstruction(translatedPrompt.output))),
+        output: strengthenObjectInsertionPrompt(buildEditInstruction(translatedPrompt.output)),
         translated: translatedPrompt.translated
       };
       translatedNegativePrompt = {
         output: buildObjectInsertionNegativePrompt(translatedNegativePrompt.output, translatedPrompt.output),
         translated: translatedNegativePrompt.translated
+      };
+    }
+
+    if (input.objectReferenceImageUrl) {
+      translatedPrompt = {
+        output: buildObjectReferenceInstruction(translatedPrompt.output),
+        translated: translatedPrompt.translated
       };
     }
 
@@ -460,6 +456,7 @@ async function buildServer() {
         workflowPath,
         modelConfig,
         referenceImageUrl: input.referenceImageUrl ?? null,
+        objectReferenceImageUrl: input.objectReferenceImageUrl ?? null,
         maskImageUrl: input.maskImageUrl ?? null,
         effectivePrompt: translatedPrompt.output,
         effectiveNegativePrompt: translatedNegativePrompt.output,

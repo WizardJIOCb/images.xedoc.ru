@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { downloadImage, getHistory, loadWorkflowTemplate, queuePrompt, renderWorkflow, uploadInputImage } from "@images/comfy";
-import { Jimp, rgbaToInt } from "jimp";
+import { Jimp } from "jimp";
 import { fetch } from "undici";
 
 const env = {
@@ -14,54 +14,14 @@ const env = {
   workflowRoot: process.env.COMFYUI_WORKFLOW_ROOT
 };
 
-function isSoccerBallPrompt(prompt: string) {
-  const normalized = prompt.toLowerCase();
-  return [
-    "soccer ball",
-    "football ball",
-    "classic black and white soccer ball",
-    "футбольн",
-    "мяч"
-  ].some((token) => normalized.includes(token));
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function pointInPolygon(x: number, y: number, vertices: Array<{ x: number; y: number }>) {
-  let inside = false;
-
-  for (let index = 0, previous = vertices.length - 1; index < vertices.length; previous = index, index += 1) {
-    const xi = vertices[index].x;
-    const yi = vertices[index].y;
-    const xj = vertices[previous].x;
-    const yj = vertices[previous].y;
-
-    const intersects = ((yi > y) !== (yj > y))
-      && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-6) + xi);
-
-    if (intersects) {
-      inside = !inside;
-    }
-  }
-
-  return inside;
-}
-
-function createRegularPolygon(cx: number, cy: number, radius: number, sides: number, rotation = 0) {
-  return Array.from({ length: sides }, (_, index) => {
-    const angle = rotation + (Math.PI * 2 * index) / sides;
-    return {
-      x: cx + Math.cos(angle) * radius,
-      y: cy + Math.sin(angle) * radius
-    };
-  });
-}
-
-async function renderSoccerBallComposite(referenceBuffer: Buffer, maskBuffer: Buffer) {
+async function renderObjectReferenceComposite(referenceBuffer: Buffer, maskBuffer: Buffer, objectBuffer: Buffer) {
   const reference = await Jimp.read(referenceBuffer);
   const mask = await Jimp.read(maskBuffer);
+  const objectImage = await Jimp.read(objectBuffer);
 
   let minX = mask.bitmap.width;
   let minY = mask.bitmap.height;
@@ -79,22 +39,35 @@ async function renderSoccerBallComposite(referenceBuffer: Buffer, maskBuffer: Bu
   });
 
   if (maxX < 0 || maxY < 0) {
-    throw new Error("Soccer ball fallback could not find a valid mask area");
+    throw new Error("Object reference composite could not find a valid mask area");
   }
 
   const maskWidth = maxX - minX + 1;
   const maskHeight = maxY - minY + 1;
-  const diameter = Math.max(36, Math.round(Math.min(maskWidth, maskHeight) * 0.92));
+  const targetWidth = Math.max(24, Math.round(maskWidth * 0.92));
+  const targetHeight = Math.max(24, Math.round(maskHeight * 0.92));
   const centerX = Math.round((minX + maxX) / 2);
   const centerY = Math.round((minY + maxY) / 2);
-  const topLeftX = Math.round(centerX - diameter / 2);
-  const topLeftY = Math.round(centerY - diameter / 2);
-  const radius = diameter / 2;
+  const objectAspect = objectImage.bitmap.width / Math.max(objectImage.bitmap.height, 1);
+
+  let drawWidth = targetWidth;
+  let drawHeight = Math.round(drawWidth / Math.max(objectAspect, 0.01));
+
+  if (drawHeight > targetHeight) {
+    drawHeight = targetHeight;
+    drawWidth = Math.round(drawHeight * objectAspect);
+  }
+
+  drawWidth = Math.max(12, drawWidth);
+  drawHeight = Math.max(12, drawHeight);
+
+  const topLeftX = Math.round(centerX - drawWidth / 2);
+  const topLeftY = Math.round(centerY - drawHeight / 2);
 
   const shadow = new Jimp({ width: reference.bitmap.width, height: reference.bitmap.height, color: 0x00000000 });
-  const shadowCenterY = topLeftY + diameter - Math.round(diameter * 0.08);
-  const shadowRadiusX = radius * 0.74;
-  const shadowRadiusY = radius * 0.24;
+  const shadowCenterY = topLeftY + drawHeight - Math.round(drawHeight * 0.06);
+  const shadowRadiusX = drawWidth * 0.42;
+  const shadowRadiusY = drawHeight * 0.16;
 
   shadow.scan(
     clamp(Math.floor(topLeftX - shadowRadiusX * 0.4), 0, shadow.bitmap.width - 1),
@@ -116,75 +89,12 @@ async function renderSoccerBallComposite(referenceBuffer: Buffer, maskBuffer: Bu
       shadow.bitmap.data[index + 3] = alpha;
     }
   );
-  shadow.blur(Math.max(2, Math.round(diameter * 0.03)));
+  shadow.blur(Math.max(2, Math.round(Math.max(drawWidth, drawHeight) * 0.03)));
 
-  const ball = new Jimp({ width: diameter, height: diameter, color: 0x00000000 });
-  const polygons = [
-    createRegularPolygon(0.5, 0.45, 0.14, 5, -Math.PI / 2),
-    createRegularPolygon(0.32, 0.28, 0.09, 5, -Math.PI / 2),
-    createRegularPolygon(0.68, 0.3, 0.09, 5, -Math.PI / 2),
-    createRegularPolygon(0.26, 0.58, 0.09, 5, -Math.PI / 2),
-    createRegularPolygon(0.72, 0.56, 0.09, 5, -Math.PI / 2),
-    createRegularPolygon(0.5, 0.73, 0.1, 5, -Math.PI / 2)
-  ];
-
-  ball.scan(0, 0, diameter, diameter, (x, y, index) => {
-    const nx = (x + 0.5 - radius) / radius;
-    const ny = (y + 0.5 - radius) / radius;
-    const distance = Math.sqrt(nx * nx + ny * ny);
-
-    if (distance > 1) {
-      return;
-    }
-
-    const light = clamp(1.08 - distance * 0.52 + (-nx * 0.16) + (-ny * 0.22), 0.45, 1.1);
-    const base = Math.round(clamp(222 * light + 18, 120, 252));
-    let red = base;
-    let green = base;
-    let blue = base;
-
-    const px = x / diameter;
-    const py = y / diameter;
-    const inPatch = polygons.some((polygon) => pointInPolygon(px, py, polygon));
-
-    if (inPatch) {
-      const patchShade = clamp(0.55 + (-nx * 0.08) + (-ny * 0.1), 0.35, 0.7);
-      const patchBase = Math.round(18 + patchShade * 36);
-      red = patchBase;
-      green = patchBase;
-      blue = patchBase;
-    }
-
-    const rimDarken = clamp((distance - 0.72) / 0.28, 0, 1);
-    red = Math.round(red * (1 - rimDarken * 0.28));
-    green = Math.round(green * (1 - rimDarken * 0.28));
-    blue = Math.round(blue * (1 - rimDarken * 0.28));
-
-    ball.bitmap.data[index] = red;
-    ball.bitmap.data[index + 1] = green;
-    ball.bitmap.data[index + 2] = blue;
-    ball.bitmap.data[index + 3] = 255;
-  });
-
-  const highlight = new Jimp({ width: diameter, height: diameter, color: 0x00000000 });
-  highlight.scan(0, 0, diameter, diameter, (x, y, index) => {
-    const dx = (x - diameter * 0.34) / (diameter * 0.18);
-    const dy = (y - diameter * 0.28) / (diameter * 0.12);
-    const distance = dx * dx + dy * dy;
-    if (distance > 1) {
-      return;
-    }
-
-    const alpha = Math.round((1 - distance) * 95);
-    highlight.bitmap.data[index] = 255;
-    highlight.bitmap.data[index + 1] = 255;
-    highlight.bitmap.data[index + 2] = 255;
-    highlight.bitmap.data[index + 3] = alpha;
-  });
-  ball.composite(highlight, 0, 0);
+  objectImage.contain({ w: drawWidth, h: drawHeight });
 
   reference.composite(shadow, 0, 0);
-  reference.composite(ball, topLeftX, topLeftY);
+  reference.composite(objectImage, topLeftX, topLeftY);
 
   return reference.getBuffer("image/png");
 }
@@ -284,6 +194,7 @@ async function executeJob(job: any) {
   let maskImageName = "";
   let referenceImageBuffer: Buffer | null = null;
   let maskImageBuffer: Buffer | null = null;
+  let objectReferenceImageBuffer: Buffer | null = null;
 
   if (params.referenceImageUrl) {
     const referenceImageUrl = String(params.referenceImageUrl).startsWith("http")
@@ -323,17 +234,29 @@ async function executeJob(job: any) {
     maskImageName = uploadedMask.name;
   }
 
-  if (referenceImageBuffer && maskImageBuffer && isSoccerBallPrompt(job.prompt)) {
-    const composited = await renderSoccerBallComposite(referenceImageBuffer, maskImageBuffer);
-    await updateStatus(job.id, "uploading", 80);
-    await sendResult(job.id, [{
-      fileName: `soccer-ball-${job.id}.png`,
-      dataBase64: composited.toString("base64")
-    }], {
-      worker: env.workerName,
-      strategy: "deterministic-soccer-ball"
-    });
-    return;
+  if (params.objectReferenceImageUrl) {
+    const objectReferenceImageUrl = String(params.objectReferenceImageUrl).startsWith("http")
+      ? String(params.objectReferenceImageUrl)
+      : `${env.workerServerUrl}${params.objectReferenceImageUrl}`;
+    const response = await fetch(objectReferenceImageUrl);
+
+    if (!response.ok) {
+      throw new Error(`Object reference image download failed with status ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    objectReferenceImageBuffer = Buffer.from(arrayBuffer);
+  }
+
+  if (referenceImageBuffer && maskImageBuffer && objectReferenceImageBuffer) {
+    const compositedBuffer = await renderObjectReferenceComposite(referenceImageBuffer, maskImageBuffer, objectReferenceImageBuffer);
+    const uploadedReference = await uploadInputImage(
+      env.comfyUrl,
+      `object-reference-composite-${job.id}.png`,
+      compositedBuffer,
+      "image/png"
+    );
+    referenceImageName = uploadedReference.name;
   }
 
   const workflow = renderWorkflow(workflowTemplate, {
@@ -395,7 +318,8 @@ async function executeJob(job: any) {
 
   await sendResult(job.id, images, {
     promptId: queued.prompt_id,
-    worker: env.workerName
+    worker: env.workerName,
+    strategy: objectReferenceImageBuffer ? "object-reference-composite" : "model-only"
   });
 }
 

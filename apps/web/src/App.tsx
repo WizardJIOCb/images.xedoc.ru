@@ -393,6 +393,8 @@ export function App() {
   const [submitting, setSubmitting] = useState(false);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
+  const [objectReferenceFile, setObjectReferenceFile] = useState<File | null>(null);
+  const [objectReferencePreviewUrl, setObjectReferencePreviewUrl] = useState<string | null>(null);
   const [referenceImageSize, setReferenceImageSize] = useState<{ width: number; height: number } | null>(null);
   const [maskDirty, setMaskDirty] = useState(false);
   const [brushSize, setBrushSize] = useState(48);
@@ -414,8 +416,11 @@ export function App() {
       if (referencePreviewUrl) {
         URL.revokeObjectURL(referencePreviewUrl);
       }
+      if (objectReferencePreviewUrl) {
+        URL.revokeObjectURL(objectReferencePreviewUrl);
+      }
     };
-  }, [referencePreviewUrl]);
+  }, [referencePreviewUrl, objectReferencePreviewUrl]);
 
   useEffect(() => {
     const canvas = maskCanvasRef.current;
@@ -485,6 +490,7 @@ export function App() {
 
     try {
       let referenceImageUrl: string | undefined;
+      let objectReferenceImageUrl: string | undefined;
       let maskImageUrl: string | undefined;
 
       if (referenceFile) {
@@ -506,6 +512,23 @@ export function App() {
 
         const uploadResult = await uploadResponse.json() as { imageUrl: string };
         referenceImageUrl = uploadResult.imageUrl;
+      }
+
+      if (objectReferenceFile) {
+        const uploadBody = new FormData();
+        uploadBody.append("file", objectReferenceFile);
+
+        const uploadResponse = await fetch(`${apiUrl}/api/reference-images`, {
+          method: "POST",
+          body: uploadBody
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error("Object reference image upload failed");
+        }
+
+        const uploadResult = await uploadResponse.json() as { imageUrl: string };
+        objectReferenceImageUrl = uploadResult.imageUrl;
       }
 
       if (referenceFile && maskDirty && maskCanvasRef.current) {
@@ -575,6 +598,7 @@ export function App() {
           ...form,
           type: referenceImageUrl ? "image-to-image" : "text-to-image",
           referenceImageUrl,
+          objectReferenceImageUrl,
           maskImageUrl
         })
       });
@@ -584,6 +608,8 @@ export function App() {
       }
       setReferenceFile(null);
       setReferencePreviewUrl(null);
+      setObjectReferenceFile(null);
+      setObjectReferencePreviewUrl(null);
       setReferenceImageSize(null);
       setMaskDirty(false);
       await loadData();
@@ -856,6 +882,67 @@ export function App() {
                     >
                       Remove
                     </button>
+                  ) : null}
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-black/10 bg-canvas/40 p-4">
+                  <p className="text-sm font-semibold">Object Reference</p>
+                  <p className="mt-1 text-xs text-ink/60">
+                    Загрузи отдельную картинку объекта, который нужно добавить в маску. Лучше всего PNG на прозрачном фоне, но JPG тоже можно.
+                  </p>
+
+                  <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
+                    <input
+                      className="block w-full text-sm text-ink/70 file:mr-4 file:rounded-full file:border-0 file:bg-canvas file:px-4 file:py-2 file:text-sm file:font-semibold file:text-ink"
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => {
+                        const nextFile = event.target.files?.[0] ?? null;
+
+                        if (objectReferencePreviewUrl) {
+                          URL.revokeObjectURL(objectReferencePreviewUrl);
+                        }
+
+                        setObjectReferenceFile(nextFile);
+                        if (nextFile) {
+                          setObjectReferencePreviewUrl(URL.createObjectURL(nextFile));
+                        } else {
+                          setObjectReferencePreviewUrl(null);
+                        }
+                      }}
+                    />
+
+                    {objectReferenceFile ? (
+                      <button
+                        type="button"
+                        className="rounded-full bg-canvas px-4 py-2 text-sm text-ink/75 transition hover:bg-canvas/80"
+                        onClick={() => {
+                          if (objectReferencePreviewUrl) {
+                            URL.revokeObjectURL(objectReferencePreviewUrl);
+                          }
+                          setObjectReferenceFile(null);
+                          setObjectReferencePreviewUrl(null);
+                        }}
+                      >
+                        Remove object
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {objectReferencePreviewUrl ? (
+                    <div className="mt-4 flex items-start gap-4">
+                      <img
+                        className="h-24 w-24 rounded-2xl object-contain bg-white"
+                        src={objectReferencePreviewUrl}
+                        alt="Object reference preview"
+                      />
+                      <div className="text-xs text-ink/65">
+                        <p>{objectReferenceFile?.name}</p>
+                        <p className="mt-1">
+                          Worker сначала вставит этот объект в отмеченную область как черновую подсказку, а потом модель подгонит свет, перспективу и интеграцию в сцену.
+                        </p>
+                      </div>
+                    </div>
                   ) : null}
                 </div>
 

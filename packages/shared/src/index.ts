@@ -22,6 +22,7 @@ export const generateJobSchema = z.object({
   modelId: z.string().uuid(),
   type: generationTypeSchema.default("text-to-image"),
   referenceImageUrl: z.string().min(1).optional(),
+  objectReferenceImageUrl: z.string().min(1).optional(),
   maskImageUrl: z.string().min(1).optional(),
   denoise: z.number().min(0.05).max(1).optional(),
   width: z.number().int().min(256).max(2048).optional(),
